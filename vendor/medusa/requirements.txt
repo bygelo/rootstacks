@@ -1,0 +1,12 @@
+frida
+frida-tools
+androguard
+requests
+apkInspector
+cmd2
+click
+colorama
+pick
+PyYAML
+packaging
+urllib3

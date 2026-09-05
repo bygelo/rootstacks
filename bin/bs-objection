@@ -1,0 +1,12 @@
+#!/bin/bash
+# Launch objection against a package over the root frida-server (auto-forwards 27042).
+# Usage: bs-objection <package> [--startup-command '<obj cmd>']
+set -euo pipefail
+. "$(dirname "$0")/bs-env.sh"
+PKG="${1:-}"; shift || true
+[ -n "$PKG" ] || { echo "usage: bs-objection <package> [objection args...]"; \
+  echo "packages: $(bsadb shell pm list packages 2>/dev/null | sed 's/package://' | tr -d '\r' | head)"; exit 1; }
+bs_connect
+"$(dirname "$0")/bs-frida" up >/dev/null 2>&1 || true
+bsadb forward tcp:27042 tcp:27042 >/dev/null 2>&1
+exec objection -N -h 127.0.0.1 -p 27042 -g "$PKG" explore "$@"

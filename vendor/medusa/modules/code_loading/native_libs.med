@@ -1,0 +1,64 @@
+{
+    "Name": "code_loading/native_libs",
+    "Description": "Detect loading of native libraries",
+    "Help": "Hooks the following functions:\n- System.loadLibrary\n- System.load\n- System.mapLibraryName",
+    "Code": "
+console.log('\\n--------Native load hook module by @ch0pin--------------\\n');
+
+{
+    var System = Java.use('java.lang.System');
+    
+    // Hook System.loadLibrary(String) - returns void
+    System.loadLibrary.overload('java.lang.String').implementation = function(library) {
+        colorLog('[+] System.loadLibrary: ' + library, {c: Color.Cyan});
+        this.loadLibrary(library);  // No return - it's void
+    };
+    
+    // Hook System.load(String) - returns void
+    System.load.overload('java.lang.String').implementation = function(filename) {
+        colorLog('[+] System.load: ' + filename, {c: Color.Cyan});
+        this.load(filename);  // No return - it's void
+    };
+    
+    // Hook System.mapLibraryName(String) - returns String
+    System.mapLibraryName.overload('java.lang.String').implementation = function(libname) {
+        var ret = this.mapLibraryName(libname);
+        colorLog('[+] System.mapLibraryName: ' + libname + ' -> ' + ret, {c: Color.Cyan});
+        return ret;
+    };
+    
+    // Native hook for android_dlopen_ext
+    var dlopen = Module.findExportByName(null, 'android_dlopen_ext');
+    if (dlopen) {
+        Interceptor.attach(dlopen, {
+            onEnter: function(args) {
+                var library_path = Memory.readCString(args[0]);
+                
+                if (library_path && library_path.startsWith('/data/user')) {
+                    colorLog('[+] dlopen (app): ' + library_path, {c: Color.Red});
+                } else {
+                    console.log('[+] dlopen (system): ' + library_path);
+                }
+            },
+            onLeave: function(retval) {
+            }
+        });
+    }
+    
+    console.log('[*] Library loading hooks installed');
+
+
+    /*
+    static void	load(String filename)
+    Loads the native library specified by the filename argument.
+
+    static void	loadLibrary(String libname)
+    Loads the native library specified by the libname argument.
+
+    static String	mapLibraryName(String libname)
+    Maps a library name into a platform-specific string representing a native library.
+
+    */
+}
+"
+}

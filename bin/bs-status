@@ -1,0 +1,22 @@
+#!/bin/bash
+# Report BlueStacks Air instrumentation state: adb, root, selinux, frida, arch.
+set -euo pipefail
+. "$(dirname "$0")/bs-env.sh"
+
+echo "== BlueStacks Air status =="
+bs_running && echo "process     : running" || echo "process     : NOT running"
+bs_connect
+echo "adb serial  : $BS_SERIAL"
+echo "model       : $(bsadb shell getprop ro.product.model 2>/dev/null | tr -d '\r') (Android $(bsadb shell getprop ro.build.version.release 2>/dev/null | tr -d '\r') / API $(bsadb shell getprop ro.build.version.sdk 2>/dev/null | tr -d '\r'))"
+echo "abi         : $(bsadb shell getprop ro.product.cpu.abi 2>/dev/null | tr -d '\r')"
+echo "selinux     : $(bsadb shell getenforce 2>/dev/null | tr -d '\r')"
+echo "debuggable  : $(bsadb shell getprop ro.debuggable 2>/dev/null | tr -d '\r')"
+if bs_has_root; then
+  echo "root (su)   : YES ($(bsadb shell 'su -c magisk -c' 2>/dev/null | tr -d '\r' | head -1))"
+else
+  echo "root (su)   : no"
+fi
+echo "frida-server: $(bsadb shell 'ls /data/local/tmp/frida-server* 2>/dev/null' | tr '\r\n' ' ')"
+echo "frida proc  : $(bsadb shell 'ps -A 2>/dev/null | grep -c frida-server' | tr -d '\r') running"
+echo "initrd      : $(md5 -q "$BS_INITRD" 2>/dev/null) ($(basename "$BS_INITRD"))"
+echo "orig backup : $([ -f "$REPO_DIR/assets/initrd_hvf.img.orig" ] && echo present || echo MISSING)"

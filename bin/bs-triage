@@ -1,0 +1,29 @@
+#!/bin/bash
+# One-shot static triage of an APK: metadata, secrets/endpoints (apkleaks),
+# decompiled Java (jadx), optional behavior score (quark). Pull-from-device or a path.
+# Usage: bs-triage <package|apk-path> [outdir]
+set -euo pipefail
+. "$(dirname "$0")/bs-env.sh"
+PY=/Library/Frameworks/Python.framework/Versions/3.14/bin
+export PATH="/opt/homebrew/bin:$PY:$PATH"
+
+IN="${1:?usage: bs-triage <package|apk> [outdir]}"
+OUT="${2:-./triage-$(basename "$IN" .apk)}"; mkdir -p "$OUT"
+
+# resolve an on-device package to a pulled APK
+if [ ! -f "$IN" ]; then
+  bs_connect
+  P=$(bsadb shell "pm path $IN" 2>/dev/null | sed 's/package://' | tr -d '\r' | head -1)
+  [ -n "$P" ] || { echo "not a file and not an installed package: $IN" >&2; exit 1; }
+  echo "[*] pulling $IN from device"; bsadb pull "$P" "$OUT/app.apk" >/dev/null 2>&1; APK="$OUT/app.apk"
+else APK="$IN"; fi
+
+echo "[*] apkleaks (secrets/URIs/endpoints) → $OUT/apkleaks.txt"
+apkleaks -f "$APK" -o "$OUT/apkleaks.txt" 2>/dev/null || echo "  (apkleaks skipped)"
+echo "[*] jadx decompile → $OUT/jadx/"
+jadx -q -d "$OUT/jadx" "$APK" >/dev/null 2>&1 || echo "  (jadx had warnings)"
+echo "[*] manifest summary"
+apktool d -q -f -s "$APK" -o "$OUT/apktool" 2>/dev/null && grep -oE 'android:name="[^"]*permission[^"]*"' "$OUT/apktool/AndroidManifest.xml" 2>/dev/null | sort -u | head -20
+echo "[*] quark behavior score (optional, slow) → $OUT/quark.json"
+( quark -a "$APK" -o "$OUT/quark.json" >/dev/null 2>&1 && echo "  quark done" ) || echo "  (quark skipped — run manually if needed)"
+echo "[✓] triage in $OUT  (apkleaks.txt, jadx/, apktool/AndroidManifest.xml)"

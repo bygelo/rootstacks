@@ -1,0 +1,76 @@
+{
+    "Name": "code_loading/dynamic_code_loading",
+    "Description": "Dynamic Code loading hook module",
+    "Help": "Hooks the following functions:\n- DexClassLoader init\n- loadclass",
+    "Code": "
+console.log('\\n--------DCL hook module by @ch0pin--------------');
+
+
+{
+    var pathClassLoader = Java.use(\"dalvik.system.PathClassLoader\")
+
+    var dexclassLoader = Java.use(\"dalvik.system.DexClassLoader\");
+    var basedexclassLoader = Java.use(\"dalvik.system.BaseDexClassLoader\");
+    var delegateLastClassLoader = Java.use(\"dalvik.system.DelegateLastClassLoader\");
+    var clazz = Java.use('java.lang.Class');
+
+    dexclassLoader.$init.implementation = function(dexPath,  optimizedDirectory,  librarySearchPath,  parent){
+        colorLog('DexClassLoader called:', {c: Color.Green});
+
+        console.log(\"dexPath=\" + dexPath );
+        console.log(\"optimizedDirectory=\" + optimizedDirectory);
+        console.log(\"librarySearchPath=\" + librarySearchPath);
+        console.log(\"parent=\" + parent);
+
+        return this.$init(dexPath, optimizedDirectory,  librarySearchPath,  parent);
+    }
+
+    basedexclassLoader.$init.overloads[0].implementation = function(dexPath,  optimizedDirectory,  librarySearchPath,  parent){
+        colorLog('BaseDexClassLoader called:', {c: Color.Green});
+         console.log(\"dexPath=\" + dexPath );
+         console.log(\"optimizedDirectory=\" + optimizedDirectory);
+         console.log(\"librarySearchPath=\" + librarySearchPath);
+         console.log(\"parent=\" + parent);           
+         return this.$init(dexPath, optimizedDirectory,  librarySearchPath,  parent);
+     }
+
+
+
+     delegateLastClassLoader.$init.overloads[0].implementation = function ( dexPath,  parent){
+        colorLog('DelegateLastClassLoader called:', {c: Color.Green});
+        console.log(\"dexPath=\" + dexPath );
+        console.log(\"parent=\" + parent);           
+        return this.$init(dexPath, parent);
+
+     }
+
+     delegateLastClassLoader.$init.overloads[1].implementation = function ( dexPath, librarySearchPath, parent){
+        colorLog('DelegateLastClassLoader called:', {c: Color.Green});
+        console.log(\"dexPath=\" + dexPath );
+        console.log(\"librarySearchPath=\" + librarySearchPath);
+        console.log(\"parent=\" + parent);         
+        return this.$init(dexPath,librarySearchPath, parent);
+
+     }
+
+traceClass('dalvik.system.InMemoryDexClassLoader');
+
+pathClassLoader.$init.overloads[0].implementation= function( dexPath,  parent){
+    colorLog('PathClassLoader called:', {c: Color.Green});
+    console.log(\"dexPath=\" + dexPath );
+    console.log(\"parent=\" + parent);         
+    return this.$init(dexPath, parent);
+
+}
+
+pathClassLoader.$init.overloads[1].implementation=function( dexPath,  librarySearchPath,  parent){
+    colorLog('PathClassLoader called:', {c: Color.Green});
+    console.log(\"dexPath=\" + dexPath );
+    console.log(\"librarySearchPath=\" + librarySearchPath);
+    console.log(\"parent=\" + parent);         
+    return this.$init(dexPath,librarySearchPath, parent);
+
+    }
+}
+"
+}

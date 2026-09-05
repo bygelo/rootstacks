@@ -1,0 +1,15 @@
+#!/bin/bash
+# Restore the pristine (unrooted) initrd_hvf.img into the BlueStacks bundle.
+# Reverses bs-root. Requires sudo (bundle is root-owned).
+set -euo pipefail
+. "$(dirname "$0")/bs-env.sh"
+
+ORIG="$REPO_DIR/assets/initrd_hvf.img.orig"
+[ -f "$ORIG" ] || { echo "ERROR: pristine backup missing at $ORIG" >&2; exit 1; }
+
+# sanity: refuse to restore a file that isn't the known-good original
+echo "[*] restoring $ORIG -> $BS_INITRD (sudo)"
+bs_quit
+sudo cp "$ORIG" "$BS_INITRD" && sudo chmod 644 "$BS_INITRD"
+echo "[*] done. initrd md5 now: $(md5 -q "$BS_INITRD")"
+echo "[*] launch BlueStacks to boot the stock (unrooted) system."

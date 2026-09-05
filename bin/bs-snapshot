@@ -1,0 +1,21 @@
+#!/bin/bash
+# Snapshot / restore the BlueStacks instance data disk (a known-good rooted baseline).
+# BlueStacks must be QUIT (the qcow2 is locked while running).
+# Usage: bs-snapshot save <name> | restore <name> | list
+set -euo pipefail
+. "$(dirname "$0")/bs-env.sh"
+DATA="/Users/Shared/Library/Application Support/BlueStacks/Engine/Tiramisu64/data.qcow2"
+SNAP_DIR="$REPO_DIR/snapshots"; mkdir -p "$SNAP_DIR"
+case "${1:-list}" in
+  save)    N="${2:?name}"; bs_running && { echo "quit BlueStacks first"; exit 1; }
+           QIMG=/Applications/BlueStacks.app/Contents/MacOS/qemu-img
+           # compressed qcow2 — qemu reads it transparently, ~5-10x smaller
+           "$QIMG" convert -c -O qcow2 "$DATA" "$SNAP_DIR/$N.data.qcow2" 2>/dev/null \
+             || cp "$DATA" "$SNAP_DIR/$N.data.qcow2"
+           echo "[✓] saved $N ($(du -h "$SNAP_DIR/$N.data.qcow2" | cut -f1))" ;;
+  restore) N="${2:?name}"; bs_running && { echo "quit BlueStacks first"; exit 1; }
+           [ -f "$SNAP_DIR/$N.data.qcow2" ] || { echo "no snapshot $N"; exit 1; }
+           cp "$SNAP_DIR/$N.data.qcow2" "$DATA"; echo "[✓] restored $N" ;;
+  list)    ls -lh "$SNAP_DIR"/*.data.qcow2 2>/dev/null || echo "(no snapshots)" ;;
+  *) echo "usage: bs-snapshot save <name> | restore <name> | list" >&2; exit 1 ;;
+esac

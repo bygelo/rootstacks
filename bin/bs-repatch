@@ -1,0 +1,45 @@
+#!/bin/bash
+# Idempotently ensure BlueStacks' bundle initrd is Kitsune-patched. Safe to run
+# anytime. Designed to run as ROOT (from the LaunchDaemon) — no sudo inside; when
+# run by a normal user it re-execs itself under sudo.
+#
+# After a BlueStacks UPDATE the bundle initrd reverts to a fresh (unpatched)
+# version; this detects that, adopts it as the new pristine backup, re-patches,
+# and swaps it back — so root survives updates automatically.
+export PATH="/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:$PATH"
+set -euo pipefail
+
+REPO_DIR="${REPO_DIR:-/Users/you/Code/rootstacks}"
+BS_INITRD="/Applications/BlueStacks.app/Contents/img/initrd_hvf.img"
+APK="$REPO_DIR/assets/magisk.apk"
+TOOL="$REPO_DIR/vendor/root-bluestacks-air"
+ORIG="$REPO_DIR/assets/initrd_hvf.img.orig"
+LOG="$REPO_DIR/assets/repatch.log"
+
+log(){ echo "$(date '+%F %T') $*" | tee -a "$LOG" >&2; }
+
+# re-exec under sudo if not root
+if [ "$(id -u)" != "0" ]; then exec sudo REPO_DIR="$REPO_DIR" "$0" "$@"; fi
+[ -f "$BS_INITRD" ] || { log "no bundle initrd (BlueStacks not installed?)"; exit 0; }
+[ -f "$APK" ] && [ -f "$TOOL/root.sh" ] || { log "missing apk/tool"; exit 1; }
+
+is_patched(){ gunzip -c "$1" 2>/dev/null | cpio -t 2>/dev/null | grep -q 'boot/magisk/magisk64'; }
+
+if is_patched "$BS_INITRD"; then
+  exit 0   # already rooted, nothing to do (this is the steady state)
+fi
+
+log "bundle initrd is UNPATCHED (fresh install or post-update) — re-applying Kitsune root"
+# adopt the current stock initrd as the pristine backup (new version after update)
+cp "$BS_INITRD" "$ORIG"
+cp "$BS_INITRD" "$REPO_DIR/assets/initrd_hvf.img.orig.$(date +%Y%m%d-%H%M%S)" 2>/dev/null || true
+
+WORK="$(mktemp -d)"; trap 'rm -rf "$WORK"' EXIT
+cp -f "$APK" "$TOOL/magisk.apk"
+# NB: feed 'y' with printf (not `yes`, which SIGPIPEs and trips pipefail/set -e)
+( cd "$TOOL" && printf 'y\n' | bash root.sh -o "$WORK/initrd_hvf.img" -b "$WORK/bk" >>"$LOG" 2>&1 )
+is_patched "$WORK/initrd_hvf.img" || { log "ERROR: build failed, NOT swapping"; exit 1; }
+
+cp "$BS_INITRD" "${BS_INITRD}.orig-rootstacks"
+cp "$WORK/initrd_hvf.img" "$BS_INITRD"; chmod 644 "$BS_INITRD"
+log "re-patched OK (md5 $(md5 -q "$BS_INITRD")). Frida/cert Magisk modules in /data persist automatically."

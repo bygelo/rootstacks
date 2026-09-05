@@ -1,0 +1,13 @@
+# Large / machine-specific artifacts — do not commit
+snapshots/
+*.qcow2
+*.qcow2.z
+assets/*.log
+assets/initrd_hvf.img.orig.*
+
+# Kitsune apk copied into the patch tool at build time (the canonical one lives in assets/)
+vendor/*/magisk.apk
+
+# Tracked intentionally: pinned Kitsune apk + pristine initrd backup
+!assets/magisk.apk
+!assets/initrd_hvf.img.orig

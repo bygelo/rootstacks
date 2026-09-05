@@ -1,0 +1,337 @@
+{
+    "Name": "root_detection/universal_root_detection_bypass",
+    "Description": "Universal bypass root, debug detection",
+    "Help": "https://codeshare.frida.re/@dzonerzy/fridantiroot/\n- Overwrite: isDebuggerConnected", 
+    "Options": [
+        {
+            "name": "mode",
+            "help": "Set it to 'verbose' to view all the logs. The default value is 'concise'.",
+            "type": "string",
+            "value": "verbose"
+        }
+    ],
+    "Code": "    
+{
+
+'use strict';
+
+function safe(name, fn) {
+    try { fn(); }
+    catch (e) { console.log('[x] ' + name + ' hook failed: ' + e); }
+}
+
+
+    console.log('\\n--------- LOADING ANTI-ROOT / ANTI-DEBUG SCRIPT ---------');
+
+    var RootPackages = [
+        'com.noshufou.android.su','com.noshufou.android.su.elite','eu.chainfire.supersu',
+        'com.koushikdutta.superuser','com.thirdparty.superuser','com.yellowes.su',
+        'com.koushikdutta.rommanager','com.koushikdutta.rommanager.license',
+        'com.dimonvideo.luckypatcher','com.chelpus.lackypatch','com.ramdroid.appquarantine',
+        'com.ramdroid.appquarantinepro','com.devadvance.rootcloak','com.devadvance.rootcloakplus',
+        'de.robv.android.xposed.installer','com.saurik.substrate','com.zachspong.temprootremovejb',
+        'com.amphoras.hidemyroot','com.amphoras.hidemyrootadfree','com.formyhm.hiderootPremium',
+        'com.formyhm.hideroot','me.phh.superuser','eu.chainfire.supersu.pro','com.kingouser.com',
+        'com.topjohnwu.magisk','com.kingroot.kinguser','com.kingo.root',
+        'com.smedialink.oneclickroot','com.zhiqupk.root.global','com.alephzain.framaroot',
+        'com.solohsu.android.edxp.manager','org.meowcat.edxposed.manager',
+        'com.chelpus.luckypatcher','cc.madkite.freedom'
+    ];
+
+    var RootBinaries = ['su','busybox','supersu','Superuser.apk','KingoUser.apk','SuperSu.apk','magisk','magiskhide','magiskinit'];
+
+    var RootProperties = {
+        'ro.build.selinux': '1',
+        'ro.debuggable': '0',
+        'service.adb.root': '0',
+        'ro.secure': '1'
+    };
+    var RootPropertiesKeys = Object.keys(RootProperties);
+
+    var SUSPICIOUS_CMDS = ['getprop','mount','build.prop','id','sh','which su','ps','busybox'];
+    function looksSuspicious(cmd) {
+        if (cmd === null || cmd === undefined) return false;
+        var s = cmd.toString();
+        for (var i = 0; i < SUSPICIOUS_CMDS.length; i++) {
+            if (s.indexOf(SUSPICIOUS_CMDS[i]) !== -1) return true;
+        }
+        return false;
+    }
+    function isSu(cmd) { return cmd !== null && cmd !== undefined && cmd.toString().trim() === 'su'; }
+
+    /* ---------------- android.os.Debug ---------------- */
+    safe('Debug.isDebuggerConnected', function () {
+        var Debug = Java.use('android.os.Debug');
+        Debug.isDebuggerConnected.implementation = function () {
+            console.log('[!] Debug.isDebuggerConnected -> false');
+            return false;
+        };
+    });
+
+    /* ---------------- Settings$Secure.getInt ---------------- */
+    safe('Settings$Secure.getInt', function () {
+        var Secure = Java.use('android.provider.Settings$Secure');
+        Secure.getInt.overloads.forEach(function (ov) {
+            ov.implementation = function () {
+                var key = arguments.length >= 2 ? arguments[1] : null;
+                if (key === 'development_settings_enabled' || key === 'adb_enabled') {
+                    console.log('[!] AntiDebug check spoofed: ' + key + ' -> 0');
+                    return 0;
+                }
+                return ov.apply(this, arguments);
+            };
+        });
+    });
+
+    /* ---------------- PackageManager.getPackageInfo ---------------- */
+    safe('PackageManager.getPackageInfo', function () {
+        var APM = Java.use('android.app.ApplicationPackageManager');
+        APM.getPackageInfo.overloads.forEach(function (ov, idx) {
+            ov.implementation = function () {
+                var name = arguments[0];
+                if (name !== null && RootPackages.indexOf(name.toString()) > -1) {
+                    console.log('[!] getPackageInfo[' + idx + '] hide root pkg: ' + name);
+                    arguments[0] = 'set.package.name.to.a.fake.one.so.we.can.bypass.it';
+                }
+                return ov.apply(this, arguments);
+            };
+        });
+    });
+
+    /* ---------------- File.exists ---------------- */
+    safe('File.exists', function () {
+        var NativeFile = Java.use('java.io.File');
+        NativeFile.exists.implementation = function () {
+            var name = NativeFile.getName.call(this);
+            if (name !== null && RootBinaries.indexOf(name.toString()) > -1) {
+                console.log('[!] File.exists hide: ' + name);
+                return false;
+            }
+            // also catch path-based checks like /system/bin/su, /sbin/su, /system/xbin/busybox
+            try {
+                var path = this.getAbsolutePath();
+                if (path !== null) {
+                    var p = path.toString();
+                    for (var i = 0; i < RootBinaries.length; i++) {
+                        if (p.endsWith('/' + RootBinaries[i])) {
+                            console.log('[!] File.exists hide path: ' + p);
+                            return false;
+                        }
+                    }
+                    if (p.indexOf('magisk') !== -1 || p.indexOf('supersu') !== -1) {
+                        console.log('[!] File.exists hide path: ' + p);
+                        return false;
+                    }
+                }
+            } catch (_) { }
+            return this.exists.call(this);
+        };
+    });
+
+    /* ---------------- Runtime.exec — all overloads ----------------
+     * Single shared handler. We don't recurse through hooked wrappers:
+     * we invoke the *same overload* exactly once with modified args.
+     */
+    safe('Runtime.exec', function () {
+        var Runtime = Java.use('java.lang.Runtime');
+
+        function neuterStringArg(s) {
+            if (looksSuspicious(s)) return 'grep';
+            if (isSu(s)) return 'justafakecommandthatcannotexist_su';
+            return s;
+        }
+        function neuterArrayArg(arr) {
+            if (arr === null) return arr;
+            for (var i = 0; i < arr.length; i++) {
+                if (looksSuspicious(arr[i])) return ['grep'];
+                if (isSu(arr[i])) return ['justafakecommandthatcannotexist_su'];
+            }
+            return arr;
+        }
+
+        Runtime.exec.overloads.forEach(function (ov) {
+            var sig = ov.argumentTypes.map(function (t) { return t.className; }).join(',');
+            ov.implementation = function () {
+                var args = Array.prototype.slice.call(arguments);
+                var first = args[0];
+                var firstType = ov.argumentTypes[0].className;
+                if (firstType === 'java.lang.String') {
+                    args[0] = neuterStringArg(first);
+                    if (args[0] !== first) console.log('[!] Runtime.exec(' + sig + ') neutered: ' + first);
+                } else if (firstType === '[Ljava.lang.String;') {
+                    var fixed = neuterArrayArg(first);
+                    if (fixed !== first) {
+                        console.log('[!] Runtime.exec(' + sig + ') neutered array');
+                        args[0] = fixed;
+                    }
+                }
+                return ov.apply(this, args);
+            };
+        });
+    });
+
+    /* ---------------- ProcessBuilder.start ---------------- */
+    safe('ProcessBuilder.start', function () {
+        var PB = Java.use('java.lang.ProcessBuilder');
+        PB.start.implementation = function () {
+            var list = this.command();
+            var n = list.size();
+            var suspicious = false, hasSu = false;
+            for (var i = 0; i < n; i++) {
+                var c = list.get(i).toString();
+                if (c === 'su') hasSu = true;
+                if (looksSuspicious(c)) suspicious = true;
+            }
+            if (suspicious || hasSu) {
+                console.log('[!] ProcessBuilder.start neuter: ' + list.toString());
+                var ArrayList = Java.use('java.util.ArrayList');
+                var fake = ArrayList.$new();
+                fake.add(hasSu ? 'justafakecommandthatcannotexist_su' : 'grep');
+                this.command.overload('java.util.List').call(this, fake);
+            }
+            return this.start.call(this);
+        };
+    });
+
+    /* ---------------- SystemProperties.get ---------------- */
+    safe('SystemProperties.get', function () {
+        var SP = Java.use('android.os.SystemProperties');
+        SP.get.overload('java.lang.String').implementation = function (name) {
+            if (RootPropertiesKeys.indexOf(name) !== -1) {
+                console.log('[!] SystemProperties.get spoof: ' + name + ' -> ' + RootProperties[name]);
+                return RootProperties[name];
+            }
+            return this.get(name);
+        };
+        // Also handle 2-arg get(String, String) if present
+        try {
+            SP.get.overload('java.lang.String', 'java.lang.String').implementation = function (name, def) {
+                if (RootPropertiesKeys.indexOf(name) !== -1) {
+                    console.log('[!] SystemProperties.get(2) spoof: ' + name);
+                    return RootProperties[name];
+                }
+                return this.get(name, def);
+            };
+        } catch (_) { }
+    });
+
+    /* ---------------- Build.TAGS / FINGERPRINT (replaces global String.contains) ---------------- */
+    safe('Build.TAGS', function () {
+        var Build = Java.use('android.os.Build');
+        Build.TAGS.value = 'release-keys';
+        if (Build.FINGERPRINT.value && Build.FINGERPRINT.value.indexOf('test-keys') !== -1) {
+            Build.FINGERPRINT.value = Build.FINGERPRINT.value.replace(/test-keys/g, 'release-keys');
+        }
+        console.log('[!] Build.TAGS -> release-keys');
+    });
+
+    /* ---------------- BufferedReader.readLine — avoid recursion ---------------- */
+    safe('BufferedReader.readLine', function () {
+        var BR = Java.use('java.io.BufferedReader');
+        BR.readLine.overloads.forEach(function (ov) {
+            ov.implementation = function () {
+                var text = ov.apply(this, arguments);
+                if (text !== null && text.indexOf('test-keys') !== -1) {
+                    console.log('[!] BufferedReader.readLine swap test-keys');
+                    return text.replace('test-keys', 'release-keys');
+                }
+                return text;
+            };
+        });
+    });
+
+    /* ---------------- Common rooted-device libs ---------------- */
+    safe('RootBeer', function () {
+        var RB = Java.use('com.scottyab.rootbeer.RootBeer');
+        ['isRooted','isRootedWithoutBusyBoxCheck','detectRootManagementApps','detectPotentiallyDangerousApps',
+         'detectTestKeys','checkForBinary','checkForDangerousProps','checkForRWPaths','detectRootCloakingApps',
+         'checkSuExists','checkForRootNative','checkForMagiskBinary'].forEach(function (m) {
+            try {
+                RB[m].overloads.forEach(function (ov) {
+                    ov.implementation = function () {
+                        console.log('[!] RootBeer.' + m + ' -> false');
+                        return false;
+                    };
+                });
+            } catch (_) { }
+        });
+    });
+
+
+/* ---------------- Native hooks (libc) ---------------- */
+function hookLibc() {
+    function hookExport(name, cb) {
+        try {
+            var p = Module.findExportByName('libc.so', name) || Module.findExportByName(null, name);
+            if (!p) { console.log('[x] libc.' + name + ' not resolvable yet'); return false; }
+            Interceptor.attach(p, cb);
+            return true;
+        } catch (e) {
+            console.log('[x] hook libc.' + name + ' failed: ' + e);
+            return false;
+        }
+    }
+
+    function pathTail(p) { var idx = p.lastIndexOf('/'); return idx === -1 ? p : p.substring(idx + 1); }
+    var RootBinaries = ['su','busybox','supersu','magisk','magiskinit','magiskhide'];
+
+    hookExport('fopen', {
+        onEnter: function (args) {
+            try {
+                var path = args[0].readCString();
+                if (path && RootBinaries.indexOf(pathTail(path)) > -1) {
+                    console.log('[!] native fopen hide: ' + path);
+                    args[0] = Memory.allocUtf8String('/dev/null/nope');
+                }
+            } catch (_) { }
+        }
+    });
+
+    hookExport('access', {
+        onEnter: function (args) {
+            try {
+                var path = args[0].readCString();
+                if (path && RootBinaries.indexOf(pathTail(path)) > -1) {
+                    console.log('[!] native access hide: ' + path);
+                    args[0] = Memory.allocUtf8String('/dev/null/nope');
+                }
+            } catch (_) { }
+        }
+    });
+
+    hookExport('stat', {
+        onEnter: function (args) {
+            try {
+                var path = args[0].readCString();
+                if (path && RootBinaries.indexOf(pathTail(path)) > -1) {
+                    console.log('[!] native stat hide: ' + path);
+                    args[0] = Memory.allocUtf8String('/dev/null/nope');
+                }
+            } catch (_) { }
+        }
+    });
+
+    hookExport('system', {
+        onEnter: function (args) {
+            try {
+                var cmd = args[0].readCString();
+                if (!cmd) return;
+                if (cmd.indexOf('getprop') !== -1 || cmd === 'mount' || cmd.indexOf('build.prop') !== -1 || cmd === 'id') {
+                    console.log('[!] native system neuter: ' + cmd);
+                    args[0] = Memory.allocUtf8String('grep nothing');
+                } else if (cmd === 'su') {
+                    console.log('[!] native system neuter: su');
+                    args[0] = Memory.allocUtf8String('justafakecommandthatcannotexist_su');
+                }
+            } catch (_) { }
+        }
+    });
+}
+
+try { hookLibc(); } catch (e) { console.log('[x] libc hooks failed: ' + e); }
+
+console.log('--------- ANTI-ROOT / ANTI-DEBUG SCRIPT LOADED ---------\\n');
+
+}
+"
+}

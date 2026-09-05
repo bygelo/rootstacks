@@ -1,0 +1,29 @@
+#!/bin/bash
+# Suppress BlueStacks' update check so it never reverts your rooted initrd or
+# nags to upgrade past the rootable build. Adds an /etc/hosts null-route for the
+# cloud host that serves /bs3/check_upgrade. Reversible: bs-block-updates off.
+#
+# Trade-off: also disables other cloud.bluestacks.com features (nowbux, some
+# stats/promos). Boot is unaffected (the app tolerates the check failing).
+set -euo pipefail
+HOSTS=/etc/hosts
+MARK="# rootstacks-block-bluestacks-updates"
+HOST=cloud.bluestacks.com
+
+case "${1:-on}" in
+  on)
+    if grep -q "$MARK" "$HOSTS"; then echo "already blocked"; exit 0; fi
+    printf '0.0.0.0 %s %s\n' "$HOST" "$MARK" | sudo tee -a "$HOSTS" >/dev/null
+    sudo dscacheutil -flushcache 2>/dev/null || true
+    echo "[✓] BlueStacks update check blocked ($HOST → 0.0.0.0). Root/initrd won't be reverted by an update."
+    ;;
+  off)
+    sudo sed -i '' "/$MARK/d" "$HOSTS"
+    sudo dscacheutil -flushcache 2>/dev/null || true
+    echo "[✓] update block removed."
+    ;;
+  status)
+    grep -q "$MARK" "$HOSTS" && echo "blocked" || echo "not blocked"
+    ;;
+  *) echo "usage: bs-block-updates [on|off|status]" >&2; exit 1 ;;
+esac

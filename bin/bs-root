@@ -1,0 +1,56 @@
+#!/bin/bash
+# Root BlueStacks Air by patching initrd_hvf.img with Kitsune Magisk (Magisk Delta
+# fork whose magisk64 supports --setup-sbin — stock Magisk fails on BlueStacks).
+# Reversible via bs-unroot. Requires sudo (bundle is root-owned).
+set -euo pipefail
+. "$(dirname "$0")/bs-env.sh"
+
+APK="$REPO_DIR/assets/magisk.apk"
+TOOL="$REPO_DIR/vendor/root-bluestacks-air"
+ORIG="$REPO_DIR/assets/initrd_hvf.img.orig"
+WORK="$(mktemp -d)"; trap 'rm -rf "$WORK"' EXIT
+
+[ -f "$APK" ]  || { echo "ERROR: missing Kitsune apk at $APK" >&2; exit 1; }
+[ -f "$TOOL/root.sh" ] || { echo "ERROR: missing patch tool at $TOOL" >&2; exit 1; }
+
+# Preserve pristine backup once (refuse if bundle already patched w/o a backup).
+if [ ! -f "$ORIG" ]; then
+  if gunzip -c "$BS_INITRD" 2>/dev/null | cpio -t 2>/dev/null | grep -q 'boot/magisk'; then
+    echo "ERROR: bundle already patched and no pristine backup — reinstall BlueStacks first." >&2; exit 1
+  fi
+  cp "$BS_INITRD" "$ORIG"
+fi
+
+echo "[*] building Kitsune-patched initrd from pristine original"
+cp -f "$APK" "$TOOL/magisk.apk"
+( cd "$TOOL" && printf 'y\n' | bash root.sh -o "$WORK/initrd_hvf.img" -b "$WORK/bk" >/dev/null 2>&1 )
+gunzip -c "$WORK/initrd_hvf.img" | cpio -t 2>/dev/null | grep -q 'boot/magisk/magisk64' \
+  || { echo "ERROR: patched initrd missing magisk payload" >&2; exit 1; }
+
+echo "[*] installing patched initrd into bundle (sudo)"
+bs_quit
+sudo cp "$BS_INITRD" "${BS_INITRD}.orig-rootstacks" 2>/dev/null || true
+sudo cp "$WORK/initrd_hvf.img" "$BS_INITRD" && sudo chmod 644 "$BS_INITRD"
+
+echo "[*] launching (auto-dismissing the upgrade nag that blocks boot)"
+bs_launch_and_wait 60 || { echo "WARN: boot timed out" >&2; }
+
+echo "[*] installing Kitsune Mask manager app"
+bsadb install -r "$APK" >/dev/null 2>&1 || true
+sleep 2
+
+echo "[*] granting ADB shell (uid 2000) root, root_access=apps+adb"
+cat > "$WORK/pol.sh" <<'EOF'
+#!/system/bin/sh
+magisk --sqlite 'REPLACE INTO settings (key,value) VALUES("root_access",3)'
+magisk --sqlite 'REPLACE INTO policies (uid,policy,until,logging,notification) VALUES(2000,2,0,1,1)'
+EOF
+bsadb push "$WORK/pol.sh" /data/local/tmp/pol.sh >/dev/null 2>&1
+# first su may need a moment for magiskd; retry
+for _ in 1 2 3 4 5; do bsadb shell "su -c 'sh /data/local/tmp/pol.sh'" >/dev/null 2>&1 && break; sleep 2; done
+
+if bs_has_root; then
+  echo "[✓] ROOT OK: $(bsadb shell 'su -c id' | tr -d '\r'); magisk $(bsadb shell 'su -c magisk -c' | tr -d '\r')"
+else
+  echo "[!] su not granted yet — open Kitsune Mask in Android once, then re-run: bs-status"
+fi

@@ -1,0 +1,313 @@
+
+{
+    "Name": "URIs/deeplinks_2",
+    "Description": "The NSURLComponents class is a class that is designed to parse URLs based on RFC 3986 and to construct URLs from their constituent parts.",
+    "Help": "An object that parses URLs into and constructs URLs from their constituent parts that bridges to URLComponents; use NSURLComponents when you need reference semantics or other Foundation-specific behavior.",
+    "Code": "    
+
+{
+
+//---------------------- iOS URL/Deeplink Tracer ----------------------
+
+const __hook_all_methods__ = false;
+const __display_duplicates__ = true;
+const __exclude_schemes__ = ['http', 'https', 'file', 'data', 'about', 'blob'];
+
+const displayedUrls = new Set();
+const max_size = 1000;
+
+var currentUrl = '';
+
+function getScheme(urlStr) {
+    if (!urlStr || !urlStr.includes('://')) return null;
+    return urlStr.split('://')[0].toLowerCase();
+}
+
+function isExcludedScheme(urlStr) {
+    var scheme = getScheme(urlStr);
+    if (!scheme) return true;
+    return __exclude_schemes__.includes(scheme);
+}
+
+function containsFilterWord(str) {
+    if (!str) return false;
+    var lower = str.toString().toLowerCase();
+    return filterKeyWords.some(word => lower.includes(word));
+}
+
+// ==================== NSURL Hooks ====================
+
+var NSURL = ObjC.classes.NSURL;
+
+// URLWithString:
+Interceptor.attach(NSURL['+ URLWithString:'].implementation, {
+    onEnter: function(args) {
+        this.urlString = ObjC.Object(args[2]);
+    },
+    onLeave: function(retval) {
+        if (!this.urlString) return;
+        var urlStr = this.urlString.toString();
+        if (isExcludedScheme(urlStr)) return;
+        
+        colorLog('[+] NSURL URLWithString: ' + urlStr, {c: Color.Green});
+    }
+});
+
+// initWithString:
+Interceptor.attach(NSURL['- initWithString:'].implementation, {
+    onEnter: function(args) {
+        this.urlString = ObjC.Object(args[2]);
+    },
+    onLeave: function(retval) {
+        if (!this.urlString) return;
+        var urlStr = this.urlString.toString();
+        if (isExcludedScheme(urlStr)) return;
+        
+        colorLog('[+] NSURL initWithString: ' + urlStr, {c: Color.Green});
+    }
+});
+
+// URLWithString:relativeToURL:
+if (NSURL['+ URLWithString:relativeToURL:']) {
+    Interceptor.attach(NSURL['+ URLWithString:relativeToURL:'].implementation, {
+        onEnter: function(args) {
+            this.urlString = ObjC.Object(args[2]);
+            this.baseUrl = ObjC.Object(args[3]);
+        },
+        onLeave: function(retval) {
+            if (!this.urlString) return;
+            var urlStr = this.urlString.toString();
+            if (isExcludedScheme(urlStr)) return;
+            
+            colorLog('[+] NSURL URLWithString:relativeToURL:', {c: Color.Green});
+            console.log('\\\t\\_string: ' + urlStr);
+            if (this.baseUrl && !this.baseUrl.isNull()) {
+                console.log('\\\t\\_baseURL: ' + this.baseUrl);
+            }
+        }
+    });
+}
+
+// ==================== NSURLComponents Hooks ====================
+
+var NSURLComponents = ObjC.classes.NSURLComponents;
+
+if (NSURLComponents) {
+    // componentsWithString:
+    if (NSURLComponents['+ componentsWithString:']) {
+        Interceptor.attach(NSURLComponents['+ componentsWithString:'].implementation, {
+            onEnter: function(args) {
+                this.urlString = ObjC.Object(args[2]);
+            },
+            onLeave: function(retval) {
+                if (!this.urlString) return;
+                var urlStr = this.urlString.toString();
+                if (isExcludedScheme(urlStr)) return;
+                
+                colorLog('[+] NSURLComponents componentsWithString: ' + urlStr, {c: Color.Purple});
+            }
+        });
+    }
+
+    // queryItems
+    if (NSURLComponents['- queryItems']) {
+        Interceptor.attach(NSURLComponents['- queryItems'].implementation, {
+            onEnter: function(args) {
+                this.components = ObjC.Object(args[0]);
+            },
+            onLeave: function(retval) {
+                if (!retval || retval.isNull()) return;
+                
+                try {
+                    var urlStr = '';
+                    if (this.components.URL && this.components.URL()) {
+                        urlStr = this.components.URL().absoluteString().toString();
+                    } else if (this.components.string && this.components.string()) {
+                        urlStr = this.components.string().toString();
+                    }
+                    
+                    if (isExcludedScheme(urlStr)) return;
+                    
+                    if (currentUrl !== urlStr) {
+                        currentUrl = urlStr;
+                        colorLog('[+] getQueryItems for URL: ' + urlStr, {c: Color.Green});
+                    }
+                    
+                    var queryItems = ObjC.Object(retval);
+                    var count = queryItems.count();
+                    
+                    for (var i = 0; i < count; i++) {
+                        var item = queryItems.objectAtIndex_(i);
+                        var name = item.name() ? item.name().toString() : '';
+                        var value = item.value() ? item.value().toString() : '';
+                        
+                        if (containsFilterWord(name) || containsFilterWord(value)) {
+                            colorLog('\\\t\\_key: ' + name + ', value: ' + value, {c: Color.Red});
+                        } else {
+                            console.log('\\\t\\_key: ' + name + ', value: ' + value);
+                        }
+                    }
+                } catch(e) {}
+            }
+        });
+    }
+}
+
+// ==================== UIApplication Hooks ====================
+
+var UIApplication = ObjC.classes.UIApplication;
+
+// canOpenURL:
+if (UIApplication['- canOpenURL:']) {
+    Interceptor.attach(UIApplication['- canOpenURL:'].implementation, {
+        onEnter: function(args) {
+            var url = ObjC.Object(args[2]);
+            if (url) {
+                var urlStr = url.absoluteString().toString();
+                if (isExcludedScheme(urlStr)) {
+                    this.excluded = true;
+                    return;
+                }
+                this.excluded = false;
+                this.urlStr = urlStr;
+            }
+        },
+        onLeave: function(retval) {
+            if (this.excluded) return;
+            colorLog('[?] canOpenURL: ' + this.urlStr + ' -> ' + retval, {c: Color.Cyan});
+        }
+    });
+}
+
+// openURL:
+if (UIApplication['- openURL:']) {
+    Interceptor.attach(UIApplication['- openURL:'].implementation, {
+        onEnter: function(args) {
+            var url = ObjC.Object(args[2]);
+            if (url) {
+                var urlStr = url.absoluteString().toString();
+                if (isExcludedScheme(urlStr)) return;
+                colorLog('[★] openURL: ' + urlStr, {c: Color.Red});
+            }
+        }
+    });
+}
+
+// openURL:options:completionHandler:
+if (UIApplication['- openURL:options:completionHandler:']) {
+    Interceptor.attach(UIApplication['- openURL:options:completionHandler:'].implementation, {
+        onEnter: function(args) {
+            var url = ObjC.Object(args[2]);
+            if (url) {
+                var urlStr = url.absoluteString().toString();
+                if (isExcludedScheme(urlStr)) return;
+                colorLog('[★] openURL:options:completionHandler: ' + urlStr, {c: Color.Red});
+            }
+        }
+    });
+}
+
+// ==================== Delegate Hooks ====================
+// ==================== Delegate Hooks ====================
+
+
+function hookURLHandlers() {
+    var skipPrefixes = ['UI', 'NS', 'CK', 'REM', 'SwiftUI', '_'];
+    
+    for (var className in ObjC.classes) {
+        try {
+      
+            if (!className.includes('Delegate')) continue;
+            
+            // Skip system classes
+            var skip = skipPrefixes.some(function(prefix) {
+                return className.startsWith(prefix);
+            });
+            if (skip) continue;
+            
+            var cls = ObjC.classes[className];
+            
+            // application:openURL:options:
+            if (cls['- application:openURL:options:']) {
+                Interceptor.attach(cls['- application:openURL:options:'].implementation, {
+                    onEnter: function(args) {
+                        var url = ObjC.Object(args[3]);
+                        if (url) {
+                            var urlStr = url.absoluteString().toString();
+                            if (isExcludedScheme(urlStr)) return;
+                            
+                            colorLog('[★] Deeplink application:openURL:options:', {c: Color.Red});
+                            console.log('\\t\\_URL: ' + urlStr);
+                            console.log('\\t\\_scheme: ' + (url.scheme() || ''));
+                            console.log('\\t\\_host: ' + (url.host() || ''));
+                            console.log('\\t\\_path: ' + (url.path() || ''));
+                            console.log('\\t\\_query: ' + (url.query() || ''));
+                        }
+                    }
+                });
+                colorLog('[+] Hooked ' + className + ' application:openURL:options:', {c: Color.Green});
+            }
+            
+            // scene:openURLContexts:
+            if (cls['- scene:openURLContexts:']) {
+                Interceptor.attach(cls['- scene:openURLContexts:'].implementation, {
+                    onEnter: function(args) {
+                        var urlContexts = ObjC.Object(args[3]);
+                        var enumerator = urlContexts.objectEnumerator();
+                        var context;
+                        while ((context = enumerator.nextObject()) !== null) {
+                            var url = context.URL();
+                            if (url) {
+                                var urlStr = url.absoluteString().toString();
+                                if (isExcludedScheme(urlStr)) continue;
+                                
+                                colorLog('[★] Deeplink scene:openURLContexts:', {c: Color.Red});
+                                console.log('\\t\\_URL: ' + urlStr);
+                                console.log('\\t\\_scheme: ' + (url.scheme() || ''));
+                                console.log('\\t\\_host: ' + (url.host() || ''));
+                                console.log('\\t\\_path: ' + (url.path() || ''));
+                                console.log('\\t\\_query: ' + (url.query() || ''));
+                            }
+                        }
+                    }
+                });
+                colorLog('[+] Hooked ' + className + ' scene:openURLContexts:', {c: Color.Green});
+            }
+            
+            // Universal Links
+            if (cls['- application:continueUserActivity:restorationHandler:']) {
+                Interceptor.attach(cls['- application:continueUserActivity:restorationHandler:'].implementation, {
+                    onEnter: function(args) {
+                        var activity = ObjC.Object(args[3]);
+                        if (activity) {
+                            var activityType = activity.activityType().toString();
+                            if (activityType === 'NSUserActivityTypeBrowsingWeb') {
+                                var webUrl = activity.webpageURL();
+                                if (webUrl) {
+                                    colorLog('[★] Universal Link continueUserActivity:', {c: Color.Yellow});
+                                    console.log('\\t\\_URL: ' + webUrl.absoluteString());
+                                }
+                            }
+                        }
+                    }
+                });
+                colorLog('[+] Hooked ' + className + ' continueUserActivity:', {c: Color.Green});
+            }
+            
+        } catch(e) {}
+    }
+}
+
+
+// ==================== Initialize ====================
+
+colorLog('[*] iOS URL/Deeplink Tracer loaded', {c: Color.Green});
+colorLog('[*] Excluded schemes: ' + __exclude_schemes__.join(', '), {c: Color.Cyan});
+
+setTimeout(hookURLHandlers, 500);
+}
+
+"
+}
+
+

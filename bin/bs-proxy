@@ -1,0 +1,15 @@
+#!/bin/bash
+# Route the BlueStacks guest's traffic through a Mac-side proxy (mitmproxy).
+# Guest gateway 10.0.2.2 == the Mac, so the proxy host is always 10.0.2.2.
+# Usage: bs-proxy on [port]   |   bs-proxy off   |   bs-proxy status
+set -euo pipefail
+. "$(dirname "$0")/bs-env.sh"
+bs_connect
+case "${1:-status}" in
+  on)  P="${2:-8080}"; bsadb shell "settings put global http_proxy 10.0.2.2:$P"
+       echo "[✓] guest http_proxy = 10.0.2.2:$P. Run 'mitmproxy --listen-host 0.0.0.0 -p $P' on the Mac."
+       echo "    (CA already trusted system-wide; for native/Flutter pinning use bs-frida + friTap.)" ;;
+  off) bsadb shell "settings put global http_proxy :0"; echo "[✓] guest proxy cleared" ;;
+  status) echo "guest http_proxy = $(bsadb shell 'settings get global http_proxy' | tr -d '\r')" ;;
+  *) echo "usage: bs-proxy on [port] | off | status" >&2; exit 1 ;;
+esac

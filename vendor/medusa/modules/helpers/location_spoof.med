@@ -1,0 +1,288 @@
+{
+    "Name": "helpers/location_spoof",
+    "Description": "Use this module to mock the device location",
+    "Help": "The script uses Athens Acropolis as default location. To set your prefered latitude/longitude use the options medusa command.",
+    "Options": [
+        {
+            "name": "latitude",
+            "help": "latitude of the spoofed location",
+            "type": "string",
+            "value": "37.9715"
+        },
+        {
+            "name": "longitude",
+            "help": "longitude of the spoofed location",
+            "type": "string",
+            "value": "23.7267"
+        }
+    ],
+    "Code": "{
+
+    let __latitude__ = '37.9715';
+    let __longitude__ = '23.7267';
+
+
+    const SPOOF = {
+    latitude: parseFloat(__latitude__),
+    longitude: parseFloat(__longitude__),
+    altitude: 15.0,
+    accuracy: 5.0,
+    bearing: 0.0,
+    speed: 0.0,
+    provider: 'gps',
+    fromMockProvider: false,
+    verbose: true,
+    };
+
+    function log(message) {
+    if (SPOOF.verbose) {
+        console.log('[controlled-location] ' + message);
+    }
+    }
+
+    function setNumber(name, value) {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) {
+        throw new Error(name + ' must be a finite number');
+    }
+    SPOOF[name] = parsed;
+    }
+
+    rpc.exports = {
+    setlocation(lat, lon, alt, acc) {
+        setNumber('latitude', lat);
+        setNumber('longitude', lon);
+        if (alt !== undefined && alt !== null) setNumber('altitude', alt);
+        if (acc !== undefined && acc !== null) setNumber('accuracy', acc);
+        log('updated to ' + SPOOF.latitude + ', ' + SPOOF.longitude);
+        return JSON.stringify(SPOOF);
+    },
+    getlocation() {
+        return JSON.stringify(SPOOF);
+    },
+    };
+
+  const Location = Java.use('android.location.Location');
+  const System = Java.use('java.lang.System');
+  const ArrayList = Java.use('java.util.ArrayList');
+
+  function nowMs() {
+    return System.currentTimeMillis();
+  }
+
+  function nowNs() {
+    return System.nanoTime();
+  }
+
+  function makeLocation(provider) {
+    const selectedProvider = provider ? String(provider) : SPOOF.provider;
+    const loc = Location.$new(selectedProvider);
+
+    loc.setLatitude(SPOOF.latitude);
+    loc.setLongitude(SPOOF.longitude);
+    loc.setAccuracy(SPOOF.accuracy);
+    loc.setTime(nowMs());
+
+    try { loc.setElapsedRealtimeNanos(nowNs()); } catch (_) {}
+    try { loc.setAltitude(SPOOF.altitude); } catch (_) {}
+    try { loc.setBearing(SPOOF.bearing); } catch (_) {}
+    try { loc.setSpeed(SPOOF.speed); } catch (_) {}
+    try { loc.setMock(SPOOF.fromMockProvider); } catch (_) {}
+
+    return loc;
+  }
+
+  function makeLocationList(provider) {
+    const list = ArrayList.$new();
+    list.add(makeLocation(provider));
+    return list;
+  }
+
+  function hookNoArg(clazz, methodName, replacement) {
+    try {
+      clazz[methodName].overload().implementation = function () {
+        return (typeof replacement === 'function')
+          ? replacement.call(this)
+          : replacement;
+      };
+      log('hooked ' + clazz.$className + '.' + methodName + '()');
+    } catch (_) {}
+  }
+
+  hookNoArg(Location, 'getLatitude', function () { return SPOOF.latitude; });
+  hookNoArg(Location, 'getLongitude', function () { return SPOOF.longitude; });
+  hookNoArg(Location, 'getAltitude', function () { return SPOOF.altitude; });
+  hookNoArg(Location, 'getAccuracy', function () { return SPOOF.accuracy; });
+  hookNoArg(Location, 'getBearing', function () { return SPOOF.bearing; });
+  hookNoArg(Location, 'getSpeed', function () { return SPOOF.speed; });
+  hookNoArg(Location, 'getTime', nowMs);
+  hookNoArg(Location, 'getElapsedRealtimeNanos', nowNs);
+  hookNoArg(Location, 'hasAltitude', true);
+  hookNoArg(Location, 'hasAccuracy', true);
+  hookNoArg(Location, 'hasBearing', true);
+  hookNoArg(Location, 'hasSpeed', true);
+  hookNoArg(Location, 'isFromMockProvider', function () { return SPOOF.fromMockProvider; });
+  hookNoArg(Location, 'isMock', function () { return SPOOF.fromMockProvider; });
+  hookNoArg(Location, 'isComplete', true);
+  hookNoArg(Location, 'toString', function () {
+    return 'Location[' + SPOOF.provider + ' ' + SPOOF.latitude + ',' +
+      SPOOF.longitude + ' hAcc=' + SPOOF.accuracy + ']';
+  });
+
+  try {
+    const LocationManager = Java.use('android.location.LocationManager');
+
+    LocationManager.getLastKnownLocation
+      .overload('java.lang.String')
+      .implementation = function (provider) {
+        log('LocationManager.getLastKnownLocation(' + provider + ')');
+        return makeLocation(provider);
+      };
+
+    try {
+      LocationManager.getCurrentLocation
+        .overload(
+          'java.lang.String',
+          'android.os.CancellationSignal',
+          'java.util.concurrent.Executor',
+          'java.util.function.Consumer'
+        )
+        .implementation = function (provider, cancellationSignal, executor, consumer) {
+          log('LocationManager.getCurrentLocation(' + provider + ')');
+          consumer.accept(makeLocation(provider));
+        };
+      log('hooked LocationManager.getCurrentLocation(...)');
+    } catch (_) {}
+
+    log('hooked LocationManager last/current location APIs');
+  } catch (e) {
+    log('LocationManager hooks unavailable: ' + e);
+  }
+
+  try {
+    const Tasks = Java.use('com.google.android.gms.tasks.Tasks');
+    const FusedLocationProviderClient = Java.use(
+      'com.google.android.gms.location.FusedLocationProviderClient'
+    );
+
+    function taskForLocation() {
+      return Tasks.forResult
+        .overload('java.lang.Object')
+        .call(Tasks, makeLocation('fused'));
+    }
+
+    function taskForVoid() {
+      return Tasks.forResult
+        .overload('java.lang.Object')
+        .call(Tasks, null);
+    }
+
+    FusedLocationProviderClient.getLastLocation
+      .overload()
+      .implementation = function () {
+        log('FusedLocationProviderClient.getLastLocation()');
+        return taskForLocation();
+      };
+
+    try {
+      FusedLocationProviderClient.getCurrentLocation
+        .overload('int', 'com.google.android.gms.tasks.CancellationToken')
+        .implementation = function (priority, cancellationToken) {
+          log('FusedLocationProviderClient.getCurrentLocation(priority, token)');
+          return taskForLocation();
+        };
+    } catch (_) {}
+
+    try {
+      FusedLocationProviderClient.getCurrentLocation
+        .overload(
+          'com.google.android.gms.location.CurrentLocationRequest',
+          'com.google.android.gms.tasks.CancellationToken'
+        )
+        .implementation = function (request, cancellationToken) {
+          log('FusedLocationProviderClient.getCurrentLocation(request, token)');
+          return taskForLocation();
+        };
+    } catch (_) {}
+
+    try {
+      const LocationResult = Java.use('com.google.android.gms.location.LocationResult');
+
+      function makeLocationResult() {
+        return LocationResult.create
+          .overload('java.util.List')
+          .call(LocationResult, makeLocationList('fused'));
+      }
+
+      function deliverCallback(callback) {
+        if (callback) {
+          callback.onLocationResult(makeLocationResult());
+        }
+      }
+
+      hookNoArg(LocationResult, 'getLastLocation', function () {
+        return makeLocation('fused');
+      });
+
+      hookNoArg(LocationResult, 'getLocations', function () {
+        return makeLocationList('fused');
+      });
+
+      try {
+        FusedLocationProviderClient.requestLocationUpdates
+          .overload(
+            'com.google.android.gms.location.LocationRequest',
+            'com.google.android.gms.location.LocationCallback',
+            'android.os.Looper'
+          )
+          .implementation = function (request, callback, looper) {
+            log('FusedLocationProviderClient.requestLocationUpdates(request, callback, looper)');
+            deliverCallback(callback);
+            return taskForVoid();
+          };
+      } catch (_) {}
+
+      try {
+        FusedLocationProviderClient.requestLocationUpdates
+          .overload(
+            'com.google.android.gms.location.LocationRequest',
+            'java.util.concurrent.Executor',
+            'com.google.android.gms.location.LocationCallback'
+          )
+          .implementation = function (request, executor, callback) {
+            log('FusedLocationProviderClient.requestLocationUpdates(request, executor, callback)');
+            deliverCallback(callback);
+            return taskForVoid();
+          };
+      } catch (_) {}
+
+      try {
+        FusedLocationProviderClient.requestLocationUpdates
+          .overload(
+            'com.google.android.gms.location.LocationRequest',
+            'com.google.android.gms.location.LocationCallback',
+            'java.util.concurrent.Executor'
+          )
+          .implementation = function (request, callback, executor) {
+            log('FusedLocationProviderClient.requestLocationUpdates(request, callback, executor)');
+            deliverCallback(callback);
+            return taskForVoid();
+          };
+      } catch (_) {}
+
+      log('hooked Google Play Services fused location APIs');
+    } catch (e) {
+      log('LocationResult hooks unavailable: ' + e);
+    }
+  } catch (e) {
+    log('FusedLocationProviderClient hooks unavailable: ' + e);
+  }
+
+  colorLog('Spoofed location: ' + SPOOF.latitude + ', ' + SPOOF.longitude, {c: Color.Red});
+
+//---------------write your code above this line----------------
+
+
+   }"
+}
+  

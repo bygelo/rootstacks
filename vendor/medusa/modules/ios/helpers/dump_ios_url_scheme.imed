@@ -1,0 +1,45 @@
+
+{
+    "Name": "helpers/dump_ios_url_scheme",
+    "Description": "Get a reference to the openURL selector",
+    "Help": "https://github.com/interference-security,https://twitter.com/xploresec ",
+    "Code": "    
+{  
+  console.log('\\n---------Loading dump_ios_url_scheme------------------');
+  const UIApplication = ObjC.classes.UIApplication;
+
+  const openURL_1 = UIApplication['- openURL:'];
+  const openURL_0 = UIApplication['- openURL:options:completionHandler:'];
+
+  Interceptor.attach(openURL_0.implementation, {
+      onEnter: function (args) {
+          try {
+              let url = new ObjC.Object(args[2]);
+              let options = new ObjC.Object(args[3]);
+              console.log('[*] UIApplication openURL called:');
+              console.log('\\tURL: ' + url.absoluteString());
+              console.log('\\tOptions: ' + options.toString());
+          } catch (e) {
+              console.log('[*] Error reading arguments: ' + e);
+          }
+      }});
+
+
+  Interceptor.attach(openURL_1.implementation, {
+    onEnter: function(args) {
+      try {
+        let myNSURL = new ObjC.Object(args[2]);
+        let myJSURL = myNSURL.absoluteString().toString();
+        console.log('Launching URL: ' + myJSURL);
+      } catch (e) {
+          console.log('[*] Error reading arguments: ' + e);
+      }      
+    }});
+}
+
+}
+"
+}
+
+
+

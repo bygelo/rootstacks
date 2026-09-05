@@ -1,0 +1,54 @@
+#!/bin/bash
+# Install a CA (default: mitmproxy) into BlueStacks Air's SYSTEM trust store so
+# apps targeting API24+ trust it. Uses Magisk root + a bind-mount over
+# /system/etc/security/cacerts (Android 7-13 method). Re-run after each reboot,
+# or use --module to install a persistent Magisk module.
+#
+# Usage: bs-mitm-cert [/path/to/ca.pem] [--module]
+set -euo pipefail
+. "$(dirname "$0")/bs-env.sh"
+
+CA="${1:-$HOME/.mitmproxy/mitmproxy-ca-cert.pem}"
+MODULE=0; [ "${2:-}" = "--module" ] && MODULE=1
+[ -f "$CA" ] || { echo "CA pem not found: $CA (start mitmproxy once to generate ~/.mitmproxy)" >&2; exit 1; }
+
+bs_connect
+bs_has_root || { echo "ERROR: no root — run bs-root first" >&2; exit 1; }
+
+# Android's legacy trust store keys on the MD5-based subject_hash_old, name <hash>.0
+HASH=$(openssl x509 -inform PEM -subject_hash_old -in "$CA" 2>/dev/null | head -1)
+[ -n "$HASH" ] || { echo "could not hash cert" >&2; exit 1; }
+BODY="$(openssl x509 -inform PEM -in "$CA")"
+TXT="$(openssl x509 -inform PEM -in "$CA" -text -fingerprint -noout 2>/dev/null)"
+TMP=$(mktemp); printf '%s\n%s\n' "$BODY" "$TXT" > "$TMP"
+
+echo "[*] cert $HASH.0  ($(openssl x509 -in "$CA" -noout -subject 2>/dev/null))"
+bsadb push "$TMP" "/data/local/tmp/$HASH.0" >/dev/null
+rm -f "$TMP"
+
+# Runtime bind-mount: build a full copy of the system store + our cert, mount over it.
+bsadb shell "su -c '
+  set -e
+  D=/data/local/tmp/rootstacks-cacerts
+  rm -rf \$D; mkdir -p \$D
+  cp /system/etc/security/cacerts/* \$D/ 2>/dev/null || true
+  cp /data/local/tmp/$HASH.0 \$D/
+  chmod 644 \$D/*
+  mount --bind \$D /system/etc/security/cacerts 2>/dev/null || mount -o bind \$D /system/etc/security/cacerts
+  echo installed: \$(ls /system/etc/security/cacerts | wc -l) certs in system store
+'"
+
+if [ "$MODULE" -eq 1 ]; then
+  echo "[*] installing persistent Magisk module (survives reboot)"
+  bsadb push "/data/local/tmp/$HASH.0" "/data/local/tmp/$HASH.0" >/dev/null 2>&1 || true
+  bsadb shell "su -c '
+    M=/data/adb/modules/rootstacks-cacert
+    mkdir -p \$M/system/etc/security/cacerts
+    cp /system/etc/security/cacerts/* \$M/system/etc/security/cacerts/ 2>/dev/null || true
+    cp /data/local/tmp/$HASH.0 \$M/system/etc/security/cacerts/
+    chmod 644 \$M/system/etc/security/cacerts/*
+    printf \"id=rootstacks-cacert\nname=rootstacks mitm CA\nversion=1\nversionCode=1\nauthor=rootstacks\ndescription=System-trusted mitmproxy/analysis CA\n\" > \$M/module.prop
+    echo module installed at \$M
+  '"
+fi
+echo "[*] done. Set proxy in Android Wi-Fi/APN to your mac IP:8080 and run: mitmproxy"
