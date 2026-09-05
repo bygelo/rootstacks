@@ -1,0 +1,6 @@
+#!/bin/bash
+# Install an APK (path or glob) into BlueStacks. Usage: bs-install <apk> [more.apk...]
+set -euo pipefail
+. "$(dirname "$0")/bs-env.sh"; bs_connect
+[ $# -ge 1 ] || { echo "usage: bs-install <apk...>"; exit 1; }
+for a in "$@"; do echo "[*] $a"; bsadb install -r "$a" 2>&1 | tail -1; done

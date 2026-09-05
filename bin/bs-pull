@@ -1,0 +1,8 @@
+#!/bin/bash
+# Pull an installed app's base APK to the host. Usage: bs-pull <package> [outdir]
+set -euo pipefail
+. "$(dirname "$0")/bs-env.sh"; bs_connect
+PKG="${1:?usage: bs-pull <package> [outdir]}"; OUT="${2:-.}"
+P=$(bsadb shell "pm path $PKG" 2>/dev/null | sed 's/package://' | tr -d '\r' | head -1)
+[ -n "$P" ] || { echo "not installed: $PKG"; exit 1; }
+bsadb pull "$P" "$OUT/$PKG.apk" >/dev/null && echo "[✓] $OUT/$PKG.apk"

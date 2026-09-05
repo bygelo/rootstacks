@@ -1,0 +1,8 @@
+#!/bin/bash
+# Spawn an app with root+emulator detection bypassed (fridantiroot). Usage: bs-bypass <package>
+set -euo pipefail
+. "$(dirname "$0")/bs-env.sh"; export PATH="/Library/Frameworks/Python.framework/Versions/3.14/bin:$PATH"
+PKG="${1:?usage: bs-bypass <package>}"; bs_connect
+"$(dirname "$0")/bs-frida" up >/dev/null 2>&1 || true
+bsadb forward tcp:27042 tcp:27042 >/dev/null 2>&1
+exec frida -H 127.0.0.1:27042 -f "$PKG" -l "$REPO_DIR/assets/frida/anti-root.js"

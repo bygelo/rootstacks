@@ -53,6 +53,8 @@ bin/bs-proxy on|transparent   # route guest traffic → Mac mitmproxy (transpare
 bin/bs-objection <pkg>        # objection explore over root frida (auto-forward 27042)
 bin/bs-unpin <pkg>            # spawn app with SSL pinning bypassed (akabe1 script)
 bin/bs-triage <pkg|apk>       # static triage: apkleaks + jadx + apktool manifest + quark
+bin/bs-install <apk> / bs-pull <pkg>   # sideload / pull an APK
+bin/bs-bypass <pkg>           # spawn app with root+emulator detection bypassed (fridantiroot)
 bin/bs-hide <pkg>             # Magisk denylist enforce + LSPosed launch (root hiding)
 bin/bs-hcall-trace [proc]     # live-trace the guest↔host hcall channel (read-only RE)
 bin/bs-snapshot save|restore  # snapshot/restore the data disk (compressed; BlueStacks must be quit)
