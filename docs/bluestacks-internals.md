@@ -85,6 +85,36 @@ The residual interest is **`hcallCommonCommand`** (generic dispatcher) and the f
 host-fs audit target, not a self-root. Blindly issuing opcodes is risky (MMIO to the host);
 map the opcode→handler table in the main binary first (static) and trace live before issuing.
 
+## The hcall dispatch table — fully mapped (opcode → handler)
+
+Reverse-engineered from the main `BlueStacks` binary (Mach-O, symbols retained). The
+dispatcher uses a **sorted array of 16-byte entries** at vaddr ~`0x1016fb…`:
+`{ uint64 opcode (tagged 0x0000010f_XXXXXXXX), uint64 handler_ptr }`, binary-searched by
+opcode. **173 entries** dumped to [`hcall-opcodes.tsv`](hcall-opcodes.tsv) (37 symbol-resolved).
+
+Security-relevant opcodes (all resolve to `plrOn*Hcall` handlers):
+
+| opcode | handler | signature |
+|---|---|---|
+| `0x0000fa16` | `plrOnEnableAdbCompletedHcall` | `(int)` |
+| `0x0000ff14` | `plrOnInstallApkCompletedHcall` | `(int, string×4)` |
+| **`0x0000ffe4`** | **`plrOnRootDeviceCompletedHcall`** | `(int)` |
+| `0x000106ea` | `plrOnClearAppDataCompletedHcall` | `(int)` |
+| `0x0001113d` | `plrOnSetDeviceProfileCompletedHcall` | `(int)` |
+| `0x000103cf` | `plrOnSetAppConfigDbParamsHcall` | `(string,bool,bool,string,bool)` |
+| `0x0000fa39` / `0x00010b10` | `plrOnExportFilesClickedHcall` / `plrOnStartExportFilesClickedHcall` | file export |
+| `0x0001036a` / `0x00010b38` | `plrOnImportFilesCompletedHcall` / `plrOnStartImportFilesClickedHcall` | file import |
+
+### Definitive root conclusion
+**Every root/adb/install handler is a `plrOn*` guest→host NOTIFICATION** that takes a *result
+code* and updates host UI/state. `plrOnRootDeviceCompletedHcall(int)` means "the guest's root
+operation finished with status N" — it does **not** grant root; it's the host's toggle updating.
+There is **no guest-invocable opcode that enables root**: root-enable is host-initiated during
+boot, gated by `bst.feature.rooting`, and we proved the guest can't flip that flag. So the
+**initrd Kitsune patch is provably the only guest-root path** — the hcall bridge is a dead end
+for update-proof self-root. (The residual audit target remains `hcallCommonCommand`'s generic
+`(subcmd, in_buf, out_buf)` passthrough and the file import/export opcodes, as a host-fs surface.)
+
 ## How to dig deeper
 ```
 rizin -A /Applications/BlueStacks.app/Contents/Frameworks/libqvirt.dylib   # aaa; afl~hcall

@@ -1,0 +1,174 @@
+opcode	handler_vaddr	symbol
+0x0000dacc	0x100651708	
+0x0000daed	0x100606034	
+0x0000db64	0x10060620c	
+0x0000dbe1	0x100611c38	
+0x0000dc09	0x100107dc8	
+0x0000dc69	0x1001d4b9c	
+0x0000dc8a	0x1000bac88	
+0x0000dcac	0x1000bde94	plrOnCustomIAPClickedHcall(std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char>> const&, std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char>> const&)
+0x0000dd0f	0x1000b9150	plrOnSetClipboardTextHcall(std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char>> const&)
+0x0000dd6f	0x10024be1c	
+0x0000dd90	0x100248150	
+0x0000ddc5	0x1000c05c0	
+0x0000de25	0x1001086a0	
+0x0000de46	0x1001d7b5c	
+0x0000de67	0x100343d0c	
+0x0000decb	0x1007522b4	
+0x0000deec	0x100761ba4	
+0x0000df0d	0x1006edf60	
+0x0000df2e	0x10035b474	
+0x0000df50	0x1003a7968	
+0x0000dfd3	0x1003a1c24	
+0x0000e019	0x10039a89c	
+0x0000e09b	0x1003a21c4	
+0x0000e102	0x10039c094	
+0x0000e16a	0x1003dcd80	
+0x0000e1cc	0x1004db6c8	
+0x0000e1ee	0x1004db2a8	
+0x0000e210	0x100501598	
+0x0000e232	0x1005014e4	
+0x0000e25b	0x100605d64	
+0x0000e2d3	0x100605ec8	
+0x0000e368	0x10064b68c	
+0x0000e38b	0x100612844	
+0x0000e3d2	0x100059774	
+0x0000e3f4	0x1000f7f78	
+0x0000e455	0x1000c0be4	plrGetMicrophoneStatusHcall()
+0x0000e477	0x1000b2a18	plrOnActivityDisplayedHcall(std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char>> const&, std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char>> const&, std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char>> const&)
+0x0000e4de	0x1001c940c	
+0x0000e500	0x1000bc7c0	plrOnNowggAccountAddedHcall(std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char>> const&)
+0x0000e561	0x1000ba660	plrOnSyncInstalledAppsHcall(std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char>> const&)
+0x0000e5c2	0x10024a098	
+0x0000e626	0x1002479ac	
+0x0000e6a9	0x10024a2d8	
+0x0000e77f	0x1001cb254	
+0x0000e7a1	0x100169af0	
+0x0000e7c3	0x100343e7c	
+0x0000e7e5	0x100343b14	
+0x0000f56b	0x100035d24	
+0x0000f58e	0x100741978	
+0x0000f5b0	0x100762de4	
+0x0000f611	0x100769008	
+0x0000f68c	0x10035b040	
+0x0000f6af	0x10038e8a4	
+0x0000f6f6	0x10039d590	
+0x0000f75b	0x10039a324	
+0x0000f7c0	0x10039bba4	
+0x0000f82c	0x1003a34e0	
+0x0000f894	0x1003a0754	
+0x0000f8fc	0x10050304c	
+0x0000f91f	0x100503020	
+0x0000f967	0x10064ad80	
+0x0000f98a	0x10064b66c	
+0x0000f9ad	0x10064b67c	
+0x0000f9d0	0x1000f7674	
+0x0000f9f3	0x1000a718c	
+0x0000fa16	0x1000b7820	plrOnEnableAdbCompletedHcall(int)
+0x0000fa39	0x1000b9764	plrOnExportFilesClickedHcall(std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char>> const&)
+0x0000fa9b	0x1000baac0	plrOnIsAppLaunchAllowedHcall(std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char>> const&, bool)
+0x0000fafe	0x1000b9284	plrOnMediaVolumeChangedHcall(bool, int)
+0x0000fb22	0x1000c1270	plrOnNowggSigninClickedHcall(std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char>> const&, std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char>> const&)
+0x0000fb87	0x1000b6770	plrOnOrientationChangedHcall(int)
+0x0000fbaa	0x1000b6f84	plrOnSetLocaleCompletedHcall(int)
+0x0000fbcd	0x10014eff0	
+0x0000fc1d	0x100169b24	
+0x0000fc5b	0x1001d82b0	
+0x0000fcc6	0x100741b6c	
+0x0000fcff	0x100761270	
+0x0000fd22	0x10038bedc	
+0x0000fd7c	0x100390be0	
+0x0000fdf7	0x10064dcc0	
+0x0000fe27	0x100672164	
+0x0000fe57	0x1000ef98c	
+0x0000fe7b	0x10024eb44	
+0x0000feb1	0x1000bad24	plrCreateDesktopShortcutHcall(std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char>> const&)
+0x0000ff14	0x1000b79e4	plrOnInstallApkCompletedHcall(int, std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char>> const&, std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char>> const&, std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char>> const&, std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char>> const&)
+0x0000ff81	0x1000bce54	plrOnNowggAccountRemovedHcall(std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char>> const&)
+0x0000ffe4	0x1000b6ee8	plrOnRootDeviceCompletedHcall(int)
+0x00010008	0x1000b6994	plrOnTextEditModeChangedHcall(bool)
+0x0001002c	0x100152f98	
+0x00010096	0x1001c61e0	
+0x000100bb	0x1001097e0	
+0x000100e1	0x100761264	
+0x00010105	0x100391618	
+0x00010174	0x10038706c	
+0x000101aa	0x100501138	
+0x0001020e	0x100651cfc	
+0x00010233	0x1006111f8	
+0x00010258	0x100058658	
+0x0001027d	0x1001512a4	
+0x000102e1	0x10015168c	
+0x00010306	0x1000b9598	plrOnGoogleLoginCompletedHcall(std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char>> const&)
+0x0001036a	0x1000b9e38	plrOnImportFilesCompletedHcall(int, std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char>> const&)
+0x000103cf	0x1000bb180	plrOnSetAppConfigDbParamsHcall(std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char>> const&, bool, bool, std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char>> const&, bool)
+0x00010439	0x10024cb90	
+0x0001045f	0x1001d2668	
+0x00010484	0x10003e460	
+0x000104bd	0x100289544	
+0x000104e2	0x100343ec0	
+0x00010507	0x100343b58	
+0x0001052c	0x1007624c8	
+0x00010551	0x10035b360	
+0x00010577	0x10039c8f0	
+0x000105f1	0x10035f2e8	
+0x00010617	0x100651718	
+0x00010644	0x100609f9c	
+0x00010697	0x100652440	
+0x000106c4	0x1001d7ba0	
+0x000106ea	0x1000b7948	plrOnClearAppDataCompletedHcall(int)
+0x00010710	0x10024c8b0	
+0x00010736	0x100036598	
+0x0001076a	0x100106aa8	
+0x00010790	0x1001098d0	
+0x000107f3	0x10035b380	
+0x0001081a	0x1003998f8	
+0x00010865	0x100392b20	
+0x000108cb	0x100393488	
+0x000108f2	0x100611f18	
+0x00010958	0x10024b098	
+0x000109be	0x10014ba64	
+0x000109f3	0x100040320	
+0x00010a59	0x10003fd24	
+0x00010a81	0x1001d2c18	plrOnAppNotificationReceivedHcall(std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char>> const&)
+0x00010ae8	0x1000bb748	plrOnConsoleModeStateChangedHcall(bool)
+0x00010b10	0x1000b996c	plrOnStartExportFilesClickedHcall()
+0x00010b38	0x1000b9858	plrOnStartImportFilesClickedHcall(std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char>>, bool)
+0x00010b9e	0x1002487dc	
+0x00010c05	0x10024d0f8	
+0x00010c2e	0x1000b61f8	plrRemoveBootScreenOnAdShownHcall(bool)
+0x00010c56	0x100108fb4	
+0x00010cc6	0x100762390	
+0x00010cee	0x100399a30	
+0x00010d71	0x10064a4b8	
+0x00010d9a	0x1006681e4	
+0x00010dc3	0x100038840	
+0x00010e2b	0x1000bd03c	plrOnDifferentImagePkgClickedHcall(std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char>> const&)
+0x00010e93	0x1000ba688	plrOnGoogleAccountListUpdatedHcall(std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char>> const&, int)
+0x00010efc	0x1000b739c	plrOnInitInputDebuggingStatusHcall(bool, bool)
+0x00010f26	0x100761d20	
+0x00010f4f	0x1003a9758	
+0x00010fe3	0x1003a102c	
+0x00011016	0x1007408a4	
+0x00011040	0x100651d48	
+0x0001106a	0x1000c0e60	plrOnAllowInstallApkGameCenterHcall(std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char>> const&)
+0x000110d3	0x1000bb7f8	plrOnGetAvailableNowggAccountsHcall(int, std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char>> const&)
+0x0001113d	0x1000b6e4c	plrOnSetDeviceProfileCompletedHcall(int)
+0x00011167	0x1000b674c	plrSetUsageStatsUpdateIntervalHcall(int)
+0x00011191	0x100761c3c	
+0x000111bb	0x100392fd4	
+0x00011225	0x1004dd9e4	
+0x0001128f	0x1000bb7e8	plrOnAffiliateTrackingCompletedHcall(std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char>> const&)
+0x000112f9	0x1000a7188	
+0x0001157d	0x1003a9b60	
+0x00011610	0x1004dd9b0	
+0x0001167c	0x1000400f4	
+0x000116f7	0x100153644	
+0x00011761	0x10032b160	
+0x000117bc	0x1007629b0	
+0x000117e9	0x100762980	
+0x00011816	0x100762dd8	
+0x00011843	0x1000bd070	plrOnCustomAppOrientationCompletedHcall(std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char>> const&)
+0x000118b0	0x1000b7300	plrOnEnableInputDebuggingCompletedHcall(int)
+0x000118de	0x100153850	
+0x0001190d	0x100153960	
