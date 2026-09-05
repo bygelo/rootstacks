@@ -75,3 +75,14 @@ Platform truths that shape priorities:
 ## Explicitly out of scope (won't work here)
 - Full Play Integrity DEVICE/STRONG (no keybox on a VM). Stock Zygisk / Zygisk Next (kernel-blocked).
   x86-only tooling (we're native ARM64). WireGuard transparent routing (10.0.2.2 already reaches host).
+
+## Northstar / research-grade (done this pass)
+- [x] **Reverse BlueStacks internals** — `libqvirt`=customized QEMU/HVF; `bstpgaipc` guest↔host
+  bridge fully protocol-mapped (`ioctl(fd,OPCODE,&payload)` over a world-writable char dev;
+  mmap+IRQ hot path; 74 hcalls). Live tracer `bs-hcall-trace`. Finding: **guest self-root via
+  hcall is NOT reachable** (rooting hcalls are host-gated notifications) → initrd patch stays
+  the root method. Doc: `docs/bluestacks-internals.md`. Open thread: decompile
+  `hcallCommonCommand`'s opcode table (static, high effort).
+- [x] **Publishable polish** — `CREDITS.md` (attribution), scoped `LICENSE` (MIT for original
+  work; vendored copyleft preserved), README repositioned as the definitive Air stack.
+- [ ] Before public push: confirm each vendored license; swap large binary assets for a download script.

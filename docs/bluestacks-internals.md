@@ -42,6 +42,49 @@ initrd's `init`), a paravirtualized IPC channel into `libqvirt`. Sibling guest d
   frida-server on the guest kernel interface).
 - **`hcallExportFiles`/`hcallUnzipFile`** are a guest→host filesystem path worth auditing.
 
+## The `bstpgaipc` transport protocol (reverse-engineered)
+
+Decoded from the guest driver `bstpgaipc.ko` (GPL, aarch64, kernel 5.15) — specifically
+`bstpgaipc_read_write` + `bstpgaipc_hypercall`, cross-checked live on the running guest.
+
+**Device:** `/dev/bstpgaipc` — misc char device, major 10 minor 125, mode **`crw-rw-rw-`
+(world-writable)**. Any guest process, including unprivileged `shell` (uid 2000), can open it.
+
+**Connection:** `open()` → `bstpgaipc_connect` allocates a **`cid`** (connection id), logged
+to dmesg (`allocated cid N`). A process opens several (e.g. GMS DroidGuard holds ~11).
+
+**Call:** userspace issues **`ioctl(fd, OPCODE, &payload)`**:
+1. driver reads the fd's `cid`, `_copy_from_user`s the payload into a shared MMIO descriptor
+   slot at `base + cid*16 + 4` (16-byte descriptors, host-visible via the PCI BAR0);
+2. calls `bstpgaipc_hypercall(cid, OPCODE)` → pokes BAR0 MMIO → **traps to the host
+   (libqvirt/QEMU)**, which reads the descriptor and dispatches to hcall handler `OPCODE`
+   in the main `BlueStacks` binary;
+3. host writes the result back into the descriptor; driver `_copy_to_user`s it and returns
+   the status word (bit 0x1f set = error). Error path logs `cid %d, cmd %d, len %d: host cmd failed`.
+
+**So `OPCODE` == the ioctl request number == the hcall command id.** `bstpgaipc_wait_host`
++ the threaded IRQ handler (`bstpgaipc_irq_handler_threaded`) handle the async/host-notify
+direction. `bin/bs-hcall-trace` observes live `(fd, opcode, payload)` via root frida (read-only).
+
+**Two data paths (measured):** the driver also exports `bstpgaipc_fops_mmap`, and consumers
+map the BAR for a **zero-copy shared-memory ring** driven by `bstpgaipc_irq_handler_threaded`.
+Empirically, ambient `ioctl` opcode traffic on framework processes is near-zero — the
+high-frequency graphics/input path goes through the mmap ring + IRQ, while `ioctl(OPCODE)` is
+the **control path** (occasional hcalls: props, install/root/adb completion, file export).
+So `bs-hcall-trace` surfaces the interesting *control* hcalls; it won't show the bulk GL traffic.
+
+### Security assessment — can the guest self-root through this?
+Direction matters. The rooting/adb hcalls are `hcallOn*Completed` = guest→host **notifications**
+("root finished"), plus host **services** (GetProps, ExportFiles, UnzipFile). The actual
+root-enable is **host-initiated and gated by `bst.feature.rooting`** — we proved the guest can't
+flip it (the conf flag is host-reverted, no `su` appears). So **firing an hcall from the guest
+does not grant guest root** — the privileged direction is host→guest.
+
+The residual interest is **`hcallCommonCommand`** (generic dispatcher) and the file hcalls
+(`ExportFiles`/`ImportFiles`/`UnzipFile`) as a guest→host **filesystem** surface — a sandbox /
+host-fs audit target, not a self-root. Blindly issuing opcodes is risky (MMIO to the host);
+map the opcode→handler table in the main binary first (static) and trace live before issuing.
+
 ## How to dig deeper
 ```
 rizin -A /Applications/BlueStacks.app/Contents/Frameworks/libqvirt.dylib   # aaa; afl~hcall

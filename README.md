@@ -1,7 +1,13 @@
 # rootstacks
 
-Analysis toolkit for **BlueStacks Air** on Apple Silicon macOS — root, ADB, Frida,
-mitmproxy/HTTPS interception, sideloading, reverse engineering.
+The most complete **BlueStacks Air (Apple Silicon macOS)** analysis stack in one place —
+root, ADB, Frida, mitmproxy/HTTPS interception, Zygisk/LSPosed, static+dynamic RE, and the
+first public reverse-engineering of BlueStacks' `libqvirt`/`bstpgaipc` guest↔host bridge.
+
+Built **on** the community rooter ([hanreev](https://github.com/hanreev/root-bluestacks-air),
+vendored + credited in `CREDITS.md`); rootstacks adds the analysis, persistence, and internals
+layers around it. Run `bin/bs-doctor` to verify the whole chain (17/17 green here).
+See `docs/bluestacks-internals.md` (the RE map) and `docs/https-intercept-proof.md` (evidence).
 
 ## How BlueStacks Air works (verified on M5 / macOS 26.5, BlueStacks 5.21.755)
 
@@ -48,6 +54,7 @@ bin/bs-objection <pkg>        # objection explore over root frida (auto-forward 
 bin/bs-unpin <pkg>            # spawn app with SSL pinning bypassed (akabe1 script)
 bin/bs-triage <pkg|apk>       # static triage: apkleaks + jadx + apktool manifest + quark
 bin/bs-hide <pkg>             # Magisk denylist enforce + LSPosed launch (root hiding)
+bin/bs-hcall-trace [proc]     # live-trace the guest↔host hcall channel (read-only RE)
 bin/bs-snapshot save|restore  # snapshot/restore the data disk (compressed; BlueStacks must be quit)
 bin/bs-unroot                 # restore pristine initrd (sudo)
 ```

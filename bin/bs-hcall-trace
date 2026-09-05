@@ -1,0 +1,31 @@
+#!/bin/bash
+# Live-trace the BlueStacks guest↔host hcall channel (/dev/bstpgaipc ioctl opcodes).
+# READ-ONLY observation via root frida. Usage: bs-hcall-trace [process-name] [seconds]
+set -euo pipefail
+. "$(dirname "$0")/bs-env.sh"
+export PATH="/Library/Frameworks/Python.framework/Versions/3.14/bin:$PATH"
+NAME="${1:-system_server}"; SECS="${2:-8}"
+SCRIPT="$REPO_DIR/assets/frida/hcall-trace.js"
+bs_connect
+bsadb forward tcp:27042 tcp:27042 >/dev/null 2>&1
+PID=$(frida-ps -H 127.0.0.1:27042 2>/dev/null | awk -v n="$NAME" '$2==n || $NF==n {print $1; exit}')
+[ -n "$PID" ] || { echo "process '$NAME' not found (try: frida-ps -H 127.0.0.1:27042)"; exit 1; }
+echo "[*] tracing hcall opcodes in $NAME (pid $PID) for ${SECS}s — read-only"
+python3 - "$PID" "$SCRIPT" "$SECS" <<'PY'
+import frida, sys, time, collections
+pid=int(sys.argv[1]); src=open(sys.argv[2]).read(); secs=float(sys.argv[3])
+dev=frida.get_device_manager().add_remote_device("127.0.0.1:27042")
+hist=collections.Counter(); samples={}
+def on(m,d):
+    if m.get("type")!="send": return
+    p=m["payload"]
+    if p.get("t")=="hcall":
+        hist[p["hex"]]+=1
+        samples.setdefault(p["hex"], p["payload16"])
+s=dev.attach(pid); scr=s.create_script(src); scr.on("message",on); scr.load()
+time.sleep(secs); s.detach()
+print("\n  opcode      count   first-payload(16 bytes)")
+for op,c in hist.most_common():
+    print(f"  {op:<10}  {c:<6}  {samples.get(op,'')}")
+print(f"\n  {len(hist)} distinct hcall opcodes observed in {secs:.0f}s")
+PY
