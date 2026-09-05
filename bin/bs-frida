@@ -13,6 +13,33 @@ bs_connect
 bs_has_root || { echo "ERROR: no root — run bs-root first" >&2; exit 1; }
 
 case "$CMD" in
+  sync)
+    # Match the on-device frida-server to the installed frida CLIENT version.
+    CLIENT="$(frida --version 2>/dev/null | tr -d '\r')"
+    [ -n "$CLIENT" ] || { echo "frida client not found on PATH" >&2; exit 1; }
+    RUNNING="$(bsadb shell 'su -c "/data/local/tmp/frida-server-$(echo '"$CLIENT"' | cut -dx -f1) --version" 2>/dev/null' | tr -d '\r' || true)"
+    DEST="/data/local/tmp/frida-server-$CLIENT"
+    if bsadb shell "ls $DEST" >/dev/null 2>&1; then
+      echo "server already matches client $CLIENT"
+    else
+      echo "[*] fetching frida-server $CLIENT (android-arm64) to match client"
+      TMP="$(mktemp -d)"
+      curl -fsSL "https://github.com/frida/frida/releases/download/$CLIENT/frida-server-$CLIENT-android-arm64.xz" -o "$TMP/fs.xz" \
+        || { echo "no release for $CLIENT" >&2; exit 1; }
+      xz -dkf "$TMP/fs.xz"
+      bsadb push "$TMP/fs" "$DEST" >/dev/null
+      rm -rf "$TMP"
+    fi
+    # repoint the persistent module + the canonical -17 name at the matched server
+    bsadb shell "su -c '
+      chmod 755 $DEST
+      cp $DEST /data/local/tmp/frida-server-17 2>/dev/null || true
+      sed -i \"s#/data/local/tmp/frida-server-[0-9.]*#$DEST#\" /data/adb/modules/rootstacks-frida/service.sh 2>/dev/null || true
+      killall -q \$(basename $DEST) 2>/dev/null
+      nohup $DEST >/dev/null 2>&1 &'"
+    sleep 1; bsadb forward tcp:27042 tcp:27042 >/dev/null 2>&1
+    echo "[✓] synced: server=$CLIENT client=$CLIENT → $(frida-ps -H 127.0.0.1:27042 2>/dev/null | wc -l | tr -d ' ') procs visible"
+    ;;
   up)
     if [ -n "$SERVER_LOCAL" ]; then
       bsadb push "$SERVER_LOCAL" "$REMOTE" >/dev/null

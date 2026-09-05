@@ -40,13 +40,19 @@ bin/bs-root                   # patch initrd w/ Kitsune, swap (sudo), launch (au
 bin/bs-repatch                # idempotent: re-root the bundle initrd if an update reverted it
 bin/bs-frida up               # run frida-server as root + forward; connect: frida-ps -H 127.0.0.1:27042
 bin/bs-mitm-cert [ca.pem]     # trust a CA in the system store (bind-mount); --module = persist
+bin/bs-doctor                 # end-to-end self-test (adb→root→frida→cert→zygisk→tools)
+bin/bs-frida up|sync          # sync = auto-match on-device server to the frida client version
 bin/bs-block-updates on|off   # stop BlueStacks reverting the rooted initrd (see Persistence)
-bin/bs-proxy on [port]        # route guest traffic → Mac mitmproxy (10.0.2.2:port)
+bin/bs-proxy on|transparent   # route guest traffic → Mac mitmproxy (transparent = iptables for pinned-to-proxy-ignoring apps)
 bin/bs-objection <pkg>        # objection explore over root frida (auto-forward 27042)
 bin/bs-unpin <pkg>            # spawn app with SSL pinning bypassed (akabe1 script)
-bin/bs-snapshot save|restore  # snapshot/restore the data disk (BlueStacks must be quit)
+bin/bs-triage <pkg|apk>       # static triage: apkleaks + jadx + apktool manifest + quark
+bin/bs-hide <pkg>             # Magisk denylist enforce + LSPosed launch (root hiding)
+bin/bs-snapshot save|restore  # snapshot/restore the data disk (compressed; BlueStacks must be quit)
 bin/bs-unroot                 # restore pristine initrd (sudo)
 ```
+
+Run `bin/bs-doctor` first — it verifies the whole chain in one shot (currently 17/17 green).
 
 Sideloading works with no root: `hd-adb -s 127.0.0.1:5555 install app.apk`.
 

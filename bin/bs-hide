@@ -1,0 +1,27 @@
+#!/bin/bash
+# Hide root from a target app via Magisk's denylist (the Shamiko substitute — Shamiko
+# needs Magisk >27005; Kitsune Air is 27001). Enforces denylist + adds the package.
+# Also opens the LSPosed manager (it has no launcher icon).
+# Usage: bs-hide <package>   |   bs-hide list   |   bs-hide lsposed
+set -euo pipefail
+. "$(dirname "$0")/bs-env.sh"
+bs_connect
+bs_has_root || { echo "no root" >&2; exit 1; }
+case "${1:-list}" in
+  lsposed)  # LSPosed manager hides its icon; open it via the manager activity
+    bsadb shell "su -c 'am start -n org.lsposed.manager/.ui.activity.MainActivity' 2>/dev/null" \
+      || bsadb shell "am start -a android.intent.action.MAIN -c org.lsposed.manager.LAUNCH_MANAGER" 2>&1
+    echo "[*] if it didn't open, dial *#*#5776733#*#* in the guest dialer (LSPosed launch code)." ;;
+  list)
+    echo "denylist enforce: $(bsadb shell 'su -c "magisk --sqlite \"SELECT value FROM settings WHERE key=\\\"denylist\\\"\""' 2>/dev/null | tr -d '\r')" ;;
+  *)
+    PKG="$1"
+    # This Kitsune build exposes no `magisk --denylist` CLI and no writable denylist
+    # table — only the enforce flag is settable here; per-app selection is app-UI-only.
+    bsadb shell "su -c 'magisk --sqlite \"REPLACE INTO settings (key,value) VALUES(\\\"denylist\\\",1)\"'" >/dev/null 2>&1
+    echo "[✓] denylist enforcement ON."
+    echo "    Per-app hiding on this Kitsune build is app-UI-only:"
+    echo "    1) bs-hide lsposed  (or open Kitsune Mask)"
+    echo "    2) Kitsune Mask → Settings → Configure DenyList → tick $PKG"
+    echo "    For a scriptable per-app bypass instead, use: bs-objection $PKG  →  'android root detection disable'" ;;
+esac

@@ -1,0 +1,36 @@
+#!/bin/bash
+# End-to-end self-test of the rootstacks stack. Exits non-zero if any check fails.
+# Exercises: adb → root → frida inject → cert-in-store → zygisk → tool versions.
+. "$(dirname "$0")/bs-env.sh"
+export PATH="/opt/homebrew/bin:/Library/Frameworks/Python.framework/Versions/3.14/bin:$PATH"
+pass=0; fail=0
+ok(){ echo "  ✓ $1"; pass=$((pass+1)); }
+no(){ echo "  ✗ $1"; fail=$((fail+1)); }
+
+echo "== rootstacks doctor =="
+bs_connect
+bsadb shell true >/dev/null 2>&1 && ok "adb connected ($BS_SERIAL)" || no "adb not connected"
+[ "$(bsadb shell 'su -c id -u' 2>/dev/null | tr -d '\r')" = "0" ] && ok "root (su → uid 0)" || no "no root"
+[ "$(bsadb shell getenforce 2>/dev/null | tr -d '\r')" = "Disabled" ] && ok "selinux disabled" || no "selinux not disabled"
+
+# frida client/server version match + live injection
+CL="$(frida --version 2>/dev/null | tr -d '\r')"
+bsadb shell "su -c 'ps -A'" 2>/dev/null | grep -q frida-server && ok "frida-server running" || no "frida-server not running"
+bsadb forward tcp:27042 tcp:27042 >/dev/null 2>&1
+SRV="$(frida-ps -H 127.0.0.1:27042 >/dev/null 2>&1 && echo ok)"
+[ "$SRV" = "ok" ] && ok "frida transport (client $CL ↔ server, frida-ps works)" || no "frida-ps failed (client/server version mismatch? run: bs-frida sync)"
+
+# mitm CA present in system store
+bsadb shell "ls /system/etc/security/cacerts/c8750f0d.0" >/dev/null 2>&1 && ok "mitmproxy CA in system store" || no "mitm CA not in system store (bs-mitm-cert)"
+
+# zygisk stack
+bsadb shell "su -c 'ps -A'" 2>/dev/null | grep -q zygiskd && ok "ReZygisk daemon running" || no "ReZygisk not running"
+bsadb shell "su -c 'ls /data/adb/modules'" 2>/dev/null | grep -q zygisk_vector && ok "LSPosed module present" || no "LSPosed module missing"
+
+# host tool presence
+for t in frida objection fritap jadx apktool apkeep rizin apkleaks mitmproxy; do
+  command -v "$t" >/dev/null 2>&1 && ok "host tool: $t" || no "host tool missing: $t"
+done
+
+echo "== $pass passed, $fail failed =="
+[ "$fail" -eq 0 ]

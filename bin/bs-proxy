@@ -10,6 +10,19 @@ case "${1:-status}" in
        echo "[✓] guest http_proxy = 10.0.2.2:$P. Run 'mitmproxy --listen-host 0.0.0.0 -p $P' on the Mac."
        echo "    (CA already trusted system-wide; for native/Flutter pinning use bs-frida + friTap.)" ;;
   off) bsadb shell "settings put global http_proxy :0"; echo "[✓] guest proxy cleared" ;;
-  status) echo "guest http_proxy = $(bsadb shell 'settings get global http_proxy' | tr -d '\r')" ;;
-  *) echo "usage: bs-proxy on [port] | off | status" >&2; exit 1 ;;
+  transparent)  # iptables REDIRECT for apps that ignore http_proxy (needs root + mitmproxy in transparent mode)
+       P="${2:-8080}"
+       bsadb shell "su -c '
+         iptables -t nat -F ROOTSTACKS 2>/dev/null; iptables -t nat -N ROOTSTACKS 2>/dev/null
+         iptables -t nat -A ROOTSTACKS -p tcp --dport 80  -j DNAT --to-destination 10.0.2.2:$P
+         iptables -t nat -A ROOTSTACKS -p tcp --dport 443 -j DNAT --to-destination 10.0.2.2:$P
+         iptables -t nat -C OUTPUT -p tcp -m owner ! --uid-owner 0 -j ROOTSTACKS 2>/dev/null || iptables -t nat -A OUTPUT -p tcp -m owner ! --uid-owner 0 -j ROOTSTACKS'"
+       echo "[✓] transparent redirect 80/443 → 10.0.2.2:$P. Run mitmproxy in TRANSPARENT mode:"
+       echo "    mitmproxy --mode transparent --listen-host 0.0.0.0 -p $P" ;;
+  transparent-off)
+       bsadb shell "su -c 'iptables -t nat -D OUTPUT -p tcp -m owner ! --uid-owner 0 -j ROOTSTACKS 2>/dev/null; iptables -t nat -F ROOTSTACKS 2>/dev/null; iptables -t nat -X ROOTSTACKS 2>/dev/null'"
+       echo "[✓] transparent redirect removed" ;;
+  status) echo "guest http_proxy = $(bsadb shell 'settings get global http_proxy' | tr -d '\r')"
+       echo "transparent rules: $(bsadb shell 'su -c "iptables -t nat -L ROOTSTACKS 2>/dev/null | grep -c DNAT"' 2>/dev/null | tr -d '\r')" ;;
+  *) echo "usage: bs-proxy on [port] | off | transparent [port] | transparent-off | status" >&2; exit 1 ;;
 esac

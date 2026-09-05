@@ -18,5 +18,9 @@ else
 fi
 echo "frida-server: $(bsadb shell 'ls /data/local/tmp/frida-server* 2>/dev/null' | tr '\r\n' ' ')"
 echo "frida proc  : $(bsadb shell 'ps -A 2>/dev/null | grep -c frida-server' | tr -d '\r') running"
-echo "initrd      : $(md5 -q "$BS_INITRD" 2>/dev/null) ($(basename "$BS_INITRD"))"
+echo "zygisk      : $(bsadb shell 'su -c "ps -A 2>/dev/null | grep -o zygiskd64 | head -1"' 2>/dev/null | tr -d '\r' | grep -q zygiskd && echo 'ReZygisk running' || echo 'off')"
+echo "modules     : $(bsadb shell 'su -c "ls /data/adb/modules 2>/dev/null"' 2>/dev/null | tr '\r\n' ' ')"
+echo "proxy       : $(bsadb shell 'settings get global http_proxy' 2>/dev/null | tr -d '\r')"
+echo "updates     : $("$(dirname "$0")/bs-block-updates" status 2>/dev/null)"
+echo "initrd      : $(gunzip -c "$BS_INITRD" 2>/dev/null | cpio -t 2>/dev/null | grep -q boot/magisk/magisk64 && echo 'Kitsune-patched' || echo 'STOCK (unrooted)')"
 echo "orig backup : $([ -f "$REPO_DIR/assets/initrd_hvf.img.orig" ] && echo present || echo MISSING)"

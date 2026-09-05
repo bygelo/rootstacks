@@ -65,10 +65,12 @@ Platform truths that shape priorities:
       artifacts + frida presence that still leak.
 
 ## Tier 6 — toolkit polish (rootstacks itself)
-- [ ] `bs-install <apk>` / `bs-pull <pkg>` helpers; `bs-proxy on|off` (sets guest http_proxy).
-- [ ] `bs-objection <pkg>` / `bs-unpin <pkg>` one-shot wrappers over frida.
-- [ ] Bundle a curated frida script library (unpinning, root-bypass, common hooks) in `assets/`.
-- [ ] `bs-snapshot` — copy data.qcow2 for a known-good rooted baseline to roll back to.
+- [x] `bs-proxy on|transparent`, `bs-objection`, `bs-unpin`, `bs-triage`, `bs-hide`, `bs-doctor`, `bs-frida sync`.
+- [x] frida script library in `assets/frida/` (multiple-unpinning.js, il2cpp-bridge.js).
+- [x] `bs-snapshot` — compressed data.qcow2 baseline (`rooted-baseline`, 4.1G).
+- [x] Toolkit under git (`git log`); `.gitignore` excludes snapshots/large blobs.
+- [x] `docs/bluestacks-internals.md` (hcall/qvirt RE) + `docs/https-intercept-proof.md` (e2e evidence).
+- [ ] `bs-install`/`bs-pull` convenience helpers (minor).
 
 ## Explicitly out of scope (won't work here)
 - Full Play Integrity DEVICE/STRONG (no keybox on a VM). Stock Zygisk / Zygisk Next (kernel-blocked).
