@@ -86,3 +86,12 @@ Platform truths that shape priorities:
 - [x] **Publishable polish** — `CREDITS.md` (attribution), scoped `LICENSE` (MIT for original
   work; vendored copyleft preserved), README repositioned as the definitive Air stack.
 - [ ] Before public push: confirm each vendored license; swap large binary assets for a download script.
+
+## Research-grade follow-ups (done)
+- [x] **Decompile `hcallCommonCommand` opcode table** — full hcall dispatch RE'd: sorted
+  `{opcode, handler}` array in the main binary, **173 opcodes** → `docs/hcall-opcodes.tsv`.
+  Proves every root/adb/install hcall is a `plrOn*` guest→host *notification* → guest self-root
+  via hcall is impossible; initrd patch is the only path. `docs/bluestacks-internals.md`.
+- [x] **Rooted arm64 AVD comparison** — stood up Android Studio AVD (google_apis arm64 33 +
+  rootAVD Magisk 25.2). `adb root` → uid=0 directly (cleaner: no sudo/bundle-patch/App-Management,
+  survives updates). Same tooling via `BS_SERIAL=emulator-5560`. `docs/avd-comparison.md`.

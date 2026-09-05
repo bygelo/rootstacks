@@ -7,7 +7,7 @@ first public reverse-engineering of BlueStacks' `libqvirt`/`bstpgaipc` guest↔h
 Built **on** the community rooter ([hanreev](https://github.com/hanreev/root-bluestacks-air),
 vendored + credited in `CREDITS.md`); rootstacks adds the analysis, persistence, and internals
 layers around it. Run `bin/bs-doctor` to verify the whole chain (17/17 green here).
-See `docs/bluestacks-internals.md` (the RE map) and `docs/https-intercept-proof.md` (evidence).
+See `docs/bluestacks-internals.md` + `docs/hcall-opcodes.tsv` (the RE map — 173 hcall opcodes), `docs/https-intercept-proof.md` (evidence), and `docs/avd-comparison.md` (rooted arm64 AVD comparison).
 
 ## How BlueStacks Air works (verified on M5 / macOS 26.5, BlueStacks 5.21.755)
 
