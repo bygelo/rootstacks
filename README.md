@@ -1,115 +1,140 @@
-# rootstacks
+<h1 align="center">rootstacks</h1>
 
-The most complete **BlueStacks Air (Apple Silicon macOS)** analysis stack in one place —
-root, ADB, Frida, mitmproxy/HTTPS interception, Zygisk/LSPosed, static+dynamic RE, and the
-first public reverse-engineering of BlueStacks' `libqvirt`/`bstpgaipc` guest↔host bridge.
+<p align="center">
+  <b>The complete BlueStacks Air analysis stack for Apple Silicon macOS.</b><br>
+  Root · ADB · Frida · mitmproxy/HTTPS interception · Zygisk/LSPosed · static+dynamic RE<br>
+  — plus the first public reverse-engineering of BlueStacks' <code>libqvirt</code>/<code>bstpgaipc</code> guest↔host bridge.
+</p>
 
-Built **on** the community rooter ([hanreev](https://github.com/hanreev/root-bluestacks-air),
-vendored + credited in `CREDITS.md`); rootstacks adds the analysis, persistence, and internals
-layers around it. Run `bin/bs-doctor` to verify the whole chain (17/17 green here).
-See `docs/bluestacks-internals.md` + `docs/hcall-opcodes.tsv` (the RE map — 173 hcall opcodes), `docs/https-intercept-proof.md` (evidence), and `docs/avd-comparison.md` (rooted arm64 AVD comparison).
+<p align="center">
+  <img alt="platform" src="https://img.shields.io/badge/platform-macOS%20Apple%20Silicon-black">
+  <img alt="target" src="https://img.shields.io/badge/target-BlueStacks%20Air%20·%20Android%2013%20arm64-1f6feb">
+  <img alt="root" src="https://img.shields.io/badge/root-Magisk%20Delta%2FKitsune-brightgreen">
+  <img alt="doctor" src="https://img.shields.io/badge/bs--doctor-17%2F17-brightgreen">
+  <img alt="license" src="https://img.shields.io/badge/license-MIT%20(+vendored)-blue">
+</p>
 
-## How BlueStacks Air works (verified on M5 / macOS 26.5, BlueStacks 5.21.755)
+---
 
-- **QEMU + Apple Hypervisor.framework (HVF)** running **native ARM64 Android 13**
-  (Tiramisu, API 33, `arm64-v8a`). No x86 translation. Spoofs a Samsung SM-G998B.
-- **SELinux is Disabled** and `ro.debuggable=1` out of the box — ideal for instrumentation.
-- Bundled ADB: `/Applications/BlueStacks.app/Contents/MacOS/hd-adb`. The instance
-  listens on **`127.0.0.1:5555`** when running.
-- Boot chain (in `Contents/img/initrd_hvf.img`, a gzip'd cpio ramdisk):
-  `/boot/init` (loads bst kernel modules, mounts `Root.qcow2` ro, extracts Android
-  `ramdisk.img`, loop-mounts `system` ro, mounts data rw) → `stage2.sh` (runs as
-  **real root**) → `exec /init` (Android init). `stage2.sh` is the root-injection point.
-- Config: `/Users/Shared/Library/Application Support/BlueStacks/bluestacks.conf`.
-  Instance data (writable): `…/Engine/Tiramisu64/data.qcow2`.
+Emulator rooters stop at `su`; generic Frida wrappers don't know what BlueStacks is. **rootstacks
+is the layer in between** — it turns a stock BlueStacks Air install into a fully instrumented
+Android RE box, and keeps it that way across reboots and updates.
 
-## Root
+Built **on** the community rooter ([hanreev/root-bluestacks-air](https://github.com/hanreev/root-bluestacks-air),
+vendored + credited in [`CREDITS.md`](CREDITS.md)); rootstacks adds the analysis, persistence, and
+internals layers around it.
 
-The `bst.feature.rooting` conf flag is a **dead end** — it doesn't create `su` and
-BlueStacks reverts it on launch. Real root = patch `initrd_hvf.img` to embed
-**Kitsune Magisk** (a Magisk Delta fork whose `magisk64` supports the `--setup-sbin`
-invocation BlueStacks' non-standard boot needs; **stock Magisk fails** here with
-`magisk64 --setup-sbin` exiting status 1). The patch injects `boot/magisk/*` +
-`magisk.rc` into `init.bst.rc` via `stage2.sh`.
-
-- APK: **Magisk-Delta-Kitsune-27.001** (`assets/magisk.apk`, sha256 in `assets/SHA256SUMS`),
-  pinned by `RobThePCGuy/Root-Bluestacks-with-Kitsune-Mask`.
-- The bundle's `initrd_hvf.img` is code-sealed in `_CodeSignature`, so replacing it
-  breaks `codesign --verify` — but it's a data resource (not a dylib), so the
-  hardened-runtime app still launches. Replacing needs **sudo** (root-owned bundle).
-
-## Usage
+## Quick start
 
 ```bash
-bin/bs-status                 # arch, adb, root, selinux, frida state
-bin/bs-root                   # patch initrd w/ Kitsune, swap (sudo), launch (auto-dismiss nag), grant su
-bin/bs-repatch                # idempotent: re-root the bundle initrd if an update reverted it
-bin/bs-frida up               # run frida-server as root + forward; connect: frida-ps -H 127.0.0.1:27042
-bin/bs-mitm-cert [ca.pem]     # trust a CA in the system store (bind-mount); --module = persist
-bin/bs-doctor                 # end-to-end self-test (adb→root→frida→cert→zygisk→tools)
-bin/bs-frida up|sync          # sync = auto-match on-device server to the frida client version
-bin/bs-block-updates on|off   # stop BlueStacks reverting the rooted initrd (see Persistence)
-bin/bs-proxy on|transparent   # route guest traffic → Mac mitmproxy (transparent = iptables for pinned-to-proxy-ignoring apps)
-bin/bs-objection <pkg>        # objection explore over root frida (auto-forward 27042)
-bin/bs-unpin <pkg>            # spawn app with SSL pinning bypassed (akabe1 script)
-bin/bs-triage <pkg|apk>       # static triage: apkleaks + jadx + apktool manifest + quark
-bin/bs-install <apk> / bs-pull <pkg>   # sideload / pull an APK
-bin/bs-bypass <pkg>           # spawn app with root+emulator detection bypassed (fridantiroot)
-bin/bs-hide <pkg>             # Magisk denylist enforce + LSPosed launch (root hiding)
-bin/bs-hcall-trace [proc]     # live-trace the guest↔host hcall channel (read-only RE)
-bin/bs-snapshot save|restore  # snapshot/restore the data disk (compressed; BlueStacks must be quit)
-bin/bs-unroot                 # restore pristine initrd (sudo)
+git clone https://github.com/bygelo/rootstacks && cd rootstacks
+bin/bs-fetch-assets     # download the 3rd-party binaries (Kitsune/ReZygisk/LSPosed/PCAPdroid)
+bin/bs-root             # patch BlueStacks' initrd with Kitsune Magisk (asks for sudo), grant su
+bin/bs-doctor           # verify the whole chain end-to-end  → 17/17
 ```
 
-Run `bin/bs-doctor` first — it verifies the whole chain in one shot (currently 17/17 green).
+That's it — you now have root, a root Frida server, and a system-trusted mitmproxy CA.
+Sideloading needs no root: `hd-adb -s 127.0.0.1:5555 install app.apk`.
 
-Sideloading works with no root: `hd-adb -s 127.0.0.1:5555 install app.apk`.
+> **Requirements:** BlueStacks Air ≤ 5.22.130.1019 (later builds add a disk-integrity check),
+> Homebrew, and a Python env with `frida`. `bs-fetch-assets` pulls the rest.
 
-## Installed analysis tooling
+## Commands
 
-Mac-side (Homebrew / the Python env that has frida): **frida 17.17**, **objection**,
-**fritap** (TLS keylogger), **frida-dexdump**, **medusa** (`vendor/medusa`), **jadx**,
-**apktool**, **apkeep**. On-device: **PCAPdroid**, **Kitsune Mask**, and Magisk modules
-**rootstacks-frida** / **rootstacks-cacert** (+ Zygisk stack: ReZygisk/Shamiko/LSPosed).
-Frida scripts in `assets/frida/` (`multiple-unpinning.js`, `il2cpp-bridge.js`).
+| Command | What it does |
+|---|---|
+| `bs-fetch-assets` | Download the 3rd-party binaries (run once after cloning) |
+| `bs-root` | Patch `initrd_hvf.img` with Kitsune Magisk, launch (auto-dismiss the upgrade nag), grant ADB su |
+| `bs-repatch` | Idempotently re-root the initrd if a BlueStacks update reverted it |
+| `bs-unroot` | Restore the pristine initrd |
+| `bs-doctor` | End-to-end self-test: adb → root → frida inject → cert → zygisk → tool versions |
+| `bs-status` | One-look state: arch, root, SELinux, frida, zygisk, modules, proxy, updates |
+| `bs-frida up \| sync` | Run frida-server as root; `sync` matches the on-device server to your frida client |
+| `bs-proxy on \| transparent` | Route guest traffic → Mac mitmproxy (`transparent` = iptables for proxy-ignoring apps) |
+| `bs-mitm-cert [ca.pem]` | Trust a CA in the system store (bind-mount; `--module` = persist) |
+| `bs-objection <pkg>` | `objection explore` over the root frida server |
+| `bs-unpin <pkg>` | Spawn an app with SSL pinning bypassed (akabe1 script) |
+| `bs-bypass <pkg>` | Spawn an app with root + emulator detection bypassed (fridantiroot) |
+| `bs-hide <pkg>` | Magisk denylist enforce + open LSPosed manager |
+| `bs-triage <pkg\|apk>` | Static triage: apkleaks + jadx + apktool manifest + quark |
+| `bs-install <apk>` / `bs-pull <pkg>` | Sideload / pull an APK |
+| `bs-snapshot save \| restore` | Snapshot/restore the data disk (compressed) |
+| `bs-hcall-trace [proc]` | Live-trace the guest↔host hcall channel (read-only RE) |
 
-Quick recipes:
-- Intercept HTTPS: `bs-proxy on 8080` → `mitmproxy --listen-host 0.0.0.0 -p 8080` on the Mac.
-- Pinned app: `bs-unpin com.target.app`  (or `bs-objection com.target.app` then `android sslpinning disable`).
-- Native/Flutter TLS mitmproxy can't see: `fritap -m -k keys.log <pkg>` (uses root frida).
-- Decompile: `jadx -d out app.apk`  ·  pull an APK: `apkeep -a com.target.app .`
-- **Frida client/server versions must match** — server is 17.17 (auto-started by the Magisk module).
+## How BlueStacks Air works
+
+- **QEMU + Apple Hypervisor.framework (HVF)** running **native ARM64 Android 13** (API 33,
+  `arm64-v8a`). No x86 translation. Spoofs a Samsung SM-G998B.
+- **SELinux is Disabled** and `ro.debuggable=1` out of the box — ideal for instrumentation.
+- ADB listens on **`127.0.0.1:5555`** (bundled `hd-adb`). Guest gateway `10.0.2.2` **is the Mac**.
+- Boot chain (in `Contents/img/initrd_hvf.img`): `/boot/init` → `stage2.sh` (runs as **real root**)
+  → Android `/init`. `stage2.sh` is the root-injection point.
+
+Full teardown — the QEMU fork, the `bstpgaipc` bridge protocol, and the 173-opcode hcall table —
+is in [`docs/bluestacks-internals.md`](docs/bluestacks-internals.md).
+
+## Why Kitsune, and why the initrd
+
+The `bst.feature.rooting` conf flag is a dead end (no `su`, and BlueStacks reverts it). Real root
+means patching `initrd_hvf.img` to embed Magisk — and **stock Magisk fails** here (`magisk64
+--setup-sbin` exits status 1). You need the **Kitsune / Magisk Delta** fork, whose `magisk64`
+supports that path. `bs-fetch-assets` pulls the pinned, hash-verified `27.001` build.
 
 ## Persistence
 
-- **Survives reboot, automatically:** root (Magisk in the patched initrd), the ADB-shell
-  su grant, **frida-server** and the **mitmproxy CA** — the last two are installed as Magisk
-  modules under `/data/adb/modules/` (`rootstacks-frida`, `rootstacks-cacert`), which live on
-  the data disk, not the app bundle.
-- **Survives a BlueStacks app update:** everything in `/data` (both Magisk modules + su grant).
-  The **initrd patch does NOT** — an update rewrites the app bundle back to a stock initrd.
-- **Re-rooting after an update is one command:** `bin/bs-root` (or `bin/bs-repatch`).
-  Run `bin/bs-block-updates on` so updates never happen unless you choose — that makes root
-  effectively permanent.
-- **Why not a fully-automatic daemon?** macOS **App Management** protection blocks background/
-  launchd processes from writing inside `/Applications/BlueStacks.app`, even as root
-  (`Operation not permitted`). Re-patch therefore runs from a Terminal that holds the grant,
-  not a daemon. This is an OS security boundary, not a limitation of the tool.
+| Survives… | What | How |
+|---|---|---|
+| **Reboot** (automatic) | root, ADB-su grant, frida-server, mitmproxy CA | Magisk in the initrd + `/data` Magisk modules (`rootstacks-frida`, `rootstacks-cacert`) |
+| **BlueStacks update** | everything in `/data` | not the initrd — re-run `bs-root` (or `bs-block-updates on` so updates never happen) |
 
-## Reversibility
+A fully-silent auto-reapply daemon is **impossible on macOS**: App Management blocks background
+processes from writing inside `/Applications/BlueStacks.app` even as root. Re-root is one command
+from a Terminal that holds the grant. Details in [Persistence notes](docs/bluestacks-internals.md).
 
-Pristine original initrd is kept at `assets/initrd_hvf.img.orig` (and in-bundle as
-`initrd_hvf.img.orig-rootstacks`). `bin/bs-unroot` restores it. `bin/bs-block-updates off`
-re-enables updates. Uninstall Magisk modules from the Kitsune Mask app.
+## Recipes
 
-## Do NOT
-- Click **"Update"** on BlueStacks' nag (updating past 5.22.130.1019 adds a disk-integrity
-  check that refuses a modified /system — much harder to root). `bs-root` auto-dismisses it.
-- `kill -9` BlueStacks repeatedly or launch with `open -n` (spawns competing instances that
-  wedge boot). The scripts use plain `open` + nag-dismiss.
+```bash
+# Intercept HTTPS (CA already trusted system-wide)
+bs-proxy on 8080 ; mitmproxy --listen-host 0.0.0.0 -p 8080
 
-## Layout
+# Bypass SSL pinning on a specific app
+bs-unpin com.target.app          # or: bs-objection com.target.app → "android sslpinning disable"
 
-- `bin/` — toolkit scripts (`bs-env.sh` shared).
-- `assets/` — pinned Kitsune apk, pristine initrd backup, `SHA256SUMS`.
-- `vendor/root-bluestacks-air/` — the initrd patch tool (hanreev), vendored.
+# TLS that mitmproxy can't see (native/Flutter)
+fritap -m -k keys.log com.target.app
+
+# Static triage / decompile
+bs-triage com.target.app ; jadx -d out app.apk ; apkeep -a com.target.app .
+```
+
+> **Frida versions must match.** `bs-frida sync` fetches the on-device server for your client version.
+
+## Installed tooling
+
+Mac-side (Homebrew + the Python env with frida): `frida`, `objection`, `fritap`, `frida-dexdump`,
+`jnitrace`, `medusa` (vendored), `jadx`, `apktool`, `apkeep`, `rizin`, `apkleaks`, `quark`, `mitmproxy`.
+On-device: Kitsune Mask, PCAPdroid, ReZygisk + LSPosed, and the `rootstacks-frida` / `rootstacks-cacert`
+Magisk modules. Frida scripts in [`assets/frida/`](assets/frida).
+
+## Docs
+
+- [`docs/bluestacks-internals.md`](docs/bluestacks-internals.md) — the RE map: QEMU/HVF, the
+  `bstpgaipc` bridge protocol, and the hcall dispatch table.
+- [`docs/hcall-opcodes.tsv`](docs/hcall-opcodes.tsv) — 173 reverse-engineered hcall opcodes.
+- [`docs/https-intercept-proof.md`](docs/https-intercept-proof.md) — end-to-end interception evidence.
+- [`docs/avd-comparison.md`](docs/avd-comparison.md) — rooted arm64 AVD vs. BlueStacks Air.
+- [`ROADMAP.md`](ROADMAP.md) · [`CREDITS.md`](CREDITS.md) · [`LICENSE`](LICENSE)
+
+## Reversibility & safety
+
+`bs-unroot` restores the original initrd (kept locally at `assets/initrd_hvf.img.orig` +
+in-bundle `.orig-rootstacks`). `bs-block-updates off` re-enables updates. **Don't** click BlueStacks'
+"Update" nag (later builds are much harder to root — `bs-root` auto-dismisses it), and don't launch
+with `open -n`.
+
+## Legal
+
+For authorized security research and analysis of apps you own or are permitted to test. rootstacks
+bundles no third-party binaries — `bs-fetch-assets` pulls them from their upstreams; BlueStacks'
+proprietary images are never redistributed. See [`CREDITS.md`](CREDITS.md) for attribution and the
+copyleft notices that vendored components carry.

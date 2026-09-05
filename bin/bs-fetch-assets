@@ -1,0 +1,30 @@
+#!/bin/bash
+# Download the third-party binaries rootstacks needs (not redistributed in-repo for
+# licensing/size reasons). Run once after cloning, before bin/bs-root.
+set -euo pipefail
+REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+A="$REPO_DIR/assets"
+mkdir -p "$A" "$A/apk" "$A/modules"
+
+fetch() { # url dest
+  [ -f "$2" ] && { echo "  have $(basename "$2")"; return; }
+  echo "  fetching $(basename "$2")"; curl -fsSL "$1" -o "$2" || { echo "  FAILED: $1" >&2; return 1; }
+}
+
+echo "[*] Kitsune Magisk (Magisk-Delta-Kitsune 27.001) — the BlueStacks root APK"
+fetch "https://github.com/RobThePCGuy/Root-Bluestacks-with-Kitsune-Mask/releases/download/magisk-delta-kitsune-27.001/Magisk-Delta-Kitsune-27.001-Canary.apk" "$A/magisk.apk"
+
+echo "[*] ReZygisk (the only Zygisk that works on BlueStacks)"
+fetch "https://github.com/PerformanC/ReZygisk/releases/download/v1.0.0/ReZygisk-v1.0.0-release.zip" "$A/modules/ReZygisk.zip"
+
+echo "[*] LSPosed (JingMatrix Vector build)"
+fetch "https://github.com/JingMatrix/LSPosed/releases/download/v2.2/Vector-v2.2-3080-Release.zip" "$A/modules/LSPosed.zip"
+
+echo "[*] PCAPdroid (on-device capture)"
+fetch "https://github.com/emanuele-f/PCAPdroid/releases/download/v2.0.0/PCAPdroid_v2.0.0.apk" "$A/apk/PCAPdroid.apk"
+
+if [ -f "$A/SHA256SUMS" ]; then
+  echo "[*] verifying checksums"
+  ( cd "$A" && shasum -a 256 -c SHA256SUMS 2>/dev/null | grep -iE "magisk|OK|FAIL" ) || echo "  (checksum note: SHA256SUMS covers the pinned Kitsune apk)"
+fi
+echo "[✓] assets ready. Next: bin/bs-root"

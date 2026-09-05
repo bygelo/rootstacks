@@ -3,11 +3,14 @@ snapshots/
 *.qcow2
 *.qcow2.z
 assets/*.log
-assets/initrd_hvf.img.orig.*
+assets/repatch*.log
+assets/initrd_hvf.img.orig*
 
-# Kitsune apk copied into the patch tool at build time (the canonical one lives in assets/)
+# Third-party binaries — fetched by bin/bs-fetch-assets, not redistributed here
+assets/magisk.apk
+assets/apk/*.apk
+assets/modules/*.zip
 vendor/*/magisk.apk
 
-# Tracked intentionally: pinned Kitsune apk + pristine initrd backup
-!assets/magisk.apk
-!assets/initrd_hvf.img.orig
+# BlueStacks proprietary boot image backup (generated locally by bs-root; never publish)
+initrd_hvf.img*
