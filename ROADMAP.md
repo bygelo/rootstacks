@@ -29,6 +29,9 @@ Platform truths that shape priorities:
 - [x] **medusa** — vendored at `vendor/medusa` (run `python vendor/medusa/mango.py`).
 - [x] Static kit (brew, Apple-Silicon native): **jadx 1.5.6**, **apktool 3.0.3**, **apkeep 1.0.0**.
       Ghidra is optional (this box: `brew install --cask ghidra` → `ghidraRun`/`analyzeHeadless`; not required on a fresh clone).
+- [x] **ASC** — vendored `vendor/asc` (MG1937/ASC `4df2f32`, Apache-2.0). On-demand class
+      decompile + xref via Androguard DAD. Wrapper: `bs-decomp getclass|findrefs|gui`.
+      Python **3.11** venv (`androguard==4.1.3`); complements jadx full-dump, not a native .so path.
 - [x] SSL-pinning: akabe1 **multiple-unpinning.js** in `assets/frida/` (`bs-unpin <pkg>`);
       objection `android sslpinning disable` as the one-liner.
 
@@ -71,7 +74,7 @@ Platform truths that shape priorities:
       artifacts + frida presence that still leak.
 
 ## Tier 6 — toolkit polish (rootstacks itself)
-- [x] `bs-proxy on|transparent`, `bs-vpn` (upstream/floxy egress), `bs-objection`, `bs-unpin`, `bs-triage`, `bs-hide`, `bs-doctor`, `bs-frida sync`.
+- [x] `bs-proxy on|transparent`, `bs-vpn` (upstream/floxy egress), `bs-objection`, `bs-unpin`, `bs-triage`, `bs-decomp`, `bs-hide`, `bs-doctor`, `bs-frida sync`.
 - [x] frida script library in `assets/frida/` (multiple-unpinning.js, il2cpp-bridge.js).
 - [x] `bs-snapshot` — compressed data.qcow2 baseline (`rooted-baseline`, 4.1G).
 - [x] Toolkit under git (`git log`); `.gitignore` excludes snapshots/large blobs.

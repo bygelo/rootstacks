@@ -10,11 +10,11 @@ no() { echo "  ✗ $1"; fail=$((fail + 1)); }
 
 echo "== rootstacks host check =="
 
-# (a) syntax of the two in-flight helpers
-if bash -n "$ROOT/bin/bs-vpn" && bash -n "$ROOT/bin/bs-frida"; then
-  ok "bash -n bs-vpn + bs-frida"
+# (a) syntax of the helpers
+if bash -n "$ROOT/bin/bs-vpn" && bash -n "$ROOT/bin/bs-frida" && bash -n "$ROOT/bin/bs-decomp"; then
+  ok "bash -n bs-vpn + bs-frida + bs-decomp"
 else
-  no "bash -n bs-vpn + bs-frida"
+  no "bash -n bs-vpn + bs-frida + bs-decomp"
 fi
 
 # (b) vpn unknown-arg: usage names the four subcommands, non-zero exit
@@ -78,6 +78,50 @@ if grep -q '\*\.quark\.log' "$ROOT/.gitignore"; then
   ok ".gitignore has *.quark.log"
 else
   no ".gitignore missing *.quark.log"
+fi
+
+# ASC wrapper: host-only --help, no guest
+if [ -f "$ROOT/vendor/asc/main.py" ]; then
+  ok "vendor/asc/main.py present"
+else
+  no "vendor/asc/main.py missing"
+fi
+if grep -q "bs-decomp" "$ROOT/README.md"; then
+  ok "README mentions bs-decomp"
+else
+  no "README missing bs-decomp"
+fi
+set +e
+decomp_usage="$("$ROOT/bin/bs-decomp" 2>&1)"
+decomp_ec=$?
+set -e
+if [ "$decomp_ec" -ne 0 ]; then
+  ok "bs-decomp no-arg exit $decomp_ec"
+else
+  no "bs-decomp no-arg exited 0"
+fi
+for word in getclass findrefs gui; do
+  if echo "$decomp_usage" | grep -q "$word"; then
+    ok "bs-decomp usage names $word"
+  else
+    no "bs-decomp usage missing $word (got: $decomp_usage)"
+  fi
+done
+set +e
+gc_help="$("$ROOT/bin/bs-decomp" getclass --help 2>&1)"
+gc_ec=$?
+fr_help="$("$ROOT/bin/bs-decomp" findrefs --help 2>&1)"
+fr_ec=$?
+set -e
+if [ "$gc_ec" -eq 0 ] && echo "$gc_help" | grep -qi "class"; then
+  ok "bs-decomp getclass --help"
+else
+  no "bs-decomp getclass --help failed (exit $gc_ec)"
+fi
+if [ "$fr_ec" -eq 0 ] && echo "$fr_help" | grep -q "string"; then
+  ok "bs-decomp findrefs --help"
+else
+  no "bs-decomp findrefs --help failed (exit $fr_ec)"
 fi
 
 echo "== $pass passed, $fail failed =="

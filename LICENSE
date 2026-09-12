@@ -6,7 +6,7 @@ scripts and Frida assets under assets/frida/) is released under the MIT License 
 It does NOT relicense the third-party components bundled in this repository. Those keep
 their upstream licenses (several are GPL/copyleft) — see CREDITS.md. In particular
 vendor/root-bluestacks-air/ (hanreev), assets/magisk.apk (Kitsune/Magisk Delta),
-vendor/medusa/, and any Magisk module or kernel artifact remain under their own terms.
+vendor/medusa/, vendor/asc/ (MG1937/ASC, Apache-2.0), and any Magisk module or kernel artifact remain under their own terms.
 Redistributors must comply with each component's license.
 
 Copyright (c) 2026 rootstacks contributors

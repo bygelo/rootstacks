@@ -25,6 +25,7 @@ work. The hard root primitive is not ours. Credit where due:
 - [frida/frida](https://github.com/frida/frida), [sensepost/objection](https://github.com/sensepost/objection),
   [Ch0pin/medusa](https://github.com/Ch0pin/medusa), [fkie-cad/friTap](https://github.com/fkie-cad/friTap),
   [emanuele-f/PCAPdroid](https://github.com/emanuele-f/PCAPdroid),
+  [MG1937/ASC](https://github.com/MG1937/ASC) (Droid ASC, Apache-2.0, vendored at `vendor/asc/` pin `4df2f32`; `bs-decomp` shells out to it),
   [skylot/jadx](https://github.com/skylot/jadx), [iBotPeaches/Apktool](https://github.com/iBotPeaches/Apktool),
   [EFForg/apkeep](https://github.com/EFForg/apkeep), [rizinorg/rizin](https://github.com/rizinorg/rizin),
   [dwisiswant0/apkleaks](https://github.com/dwisiswant0/apkleaks),
@@ -36,7 +37,7 @@ work. The hard root primitive is not ours. Credit where due:
 ## What IS original to rootstacks
 The wiring, not the parts: the Kitsune-vs-stock diagnosis, the persistence engineering
 (Magisk-module frida/cert + auto-reapply + the macOS App-Management finding), `bs-frida sync`,
-`bs-doctor`, `bs-proxy transparent`, `bs-triage`, `bs-hcall-trace`, and the
+`bs-doctor`, `bs-proxy transparent`, `bs-triage`, `bs-decomp`, `bs-hcall-trace`, and the
 `docs/bluestacks-internals.md` reverse-engineering of BlueStacks' `libqvirt`/`bstpgaipc`
 guest↔host bridge (no prior public write-up known).
 

@@ -58,6 +58,7 @@ Sideloading needs no root: `hd-adb -s 127.0.0.1:5555 install app.apk`.
 | `bs-bypass <pkg>` | Spawn an app with root + emulator detection bypassed (fridantiroot) |
 | `bs-hide <pkg>` | Magisk denylist enforce + open LSPosed manager |
 | `bs-triage <pkg\|apk>` | Static triage: apkleaks + jadx + apktool manifest + quark |
+| `bs-decomp getclass \| findrefs \| gui` | On-demand class decompile + xref via vendored ASC (Python 3.11). `<apk\|pkg>` then class/query. |
 | `bs-install <apk>` / `bs-pull <pkg>` | Sideload / pull an APK |
 | `bs-snapshot save \| restore` | Snapshot/restore the data disk (compressed) |
 | `bs-hcall-trace [proc]` | Live-trace the guest↔host hcall channel (read-only RE) |
@@ -106,6 +107,8 @@ fritap -m -k keys.log com.target.app
 
 # Static triage / decompile
 bs-triage com.target.app ; jadx -d out app.apk ; apkeep -a com.target.app .
+bs-decomp getclass com.target.app com.target.Main -o Main.java
+bs-decomp findrefs app.apk string Authorization
 ```
 
 > **Frida versions must match.** `bs-frida sync` fetches the on-device server for your client version.
@@ -113,7 +116,7 @@ bs-triage com.target.app ; jadx -d out app.apk ; apkeep -a com.target.app .
 ## Installed tooling
 
 Mac-side (Homebrew + the Python env with frida): `frida`, `objection`, `fritap`, `frida-dexdump`,
-`jnitrace`, `medusa` (vendored), `jadx`, `apktool`, `apkeep`, `rizin`, `apkleaks`, `quark`, `mitmproxy`.
+`jnitrace`, `medusa` (vendored), **ASC** (vendored `vendor/asc`, `bs-decomp`), `jadx`, `apktool`, `apkeep`, `rizin`, `apkleaks`, `quark`, `mitmproxy`.
 On-device: Kitsune Mask, PCAPdroid, ReZygisk + LSPosed, and the `rootstacks-frida` / `rootstacks-cacert`
 Magisk modules. Frida scripts in [`assets/frida/`](assets/frida).
 

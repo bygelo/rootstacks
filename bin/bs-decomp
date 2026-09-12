@@ -1,0 +1,142 @@
+#!/bin/bash
+# On-demand APK class decompile + xref via vendored MG1937/ASC (Androguard DAD).
+# Host-side. Python 3.11 venv. Does not need a guest for --help.
+# Usage:
+#   bs-decomp getclass <apk|pkg> <class> [-o FILE] [--debug] [--threads N]
+#   bs-decomp findrefs <apk|pkg> string|type|method|field ...
+#   bs-decomp gui <apk|pkg>
+set -euo pipefail
+. "$(dirname "$0")/bs-env.sh"
+
+ASC_DIR="$REPO_DIR/vendor/asc"
+CACHE_DIR="$REPO_DIR/.cache"
+VENV="$ASC_DIR/.venv"
+PY311="${ASC_PYTHON:-}"
+if [ -z "$PY311" ]; then
+  PY311="$(command -v python3.11 2>/dev/null || true)"
+fi
+[ -n "$PY311" ] || PY311="/opt/homebrew/bin/python3.11"
+
+usage() {
+  echo "usage: bs-decomp getclass <apk|pkg> <class> [-o FILE] [--debug] [--threads N]" >&2
+  echo "       bs-decomp findrefs <apk|pkg> string|type|method|field ..." >&2
+  echo "       bs-decomp gui <apk|pkg>" >&2
+  exit 1
+}
+
+abs_path() {
+  local f="$1"
+  printf '%s/%s\n' "$(cd "$(dirname "$f")" && pwd)" "$(basename "$f")"
+}
+
+ensure_asc() {
+  [ -f "$ASC_DIR/main.py" ] || { echo "ASC missing at $ASC_DIR" >&2; exit 1; }
+}
+
+ensure_python() {
+  [ -x "$PY311" ] || { echo "python3.11 not found (ASC needs 3.11/3.12); set ASC_PYTHON" >&2; exit 1; }
+}
+
+ensure_venv() {
+  ensure_python
+  if [ ! -x "$VENV/bin/python" ]; then
+    echo "[*] creating ASC venv with $PY311" >&2
+    "$PY311" -m venv "$VENV"
+    "$VENV/bin/pip" install -q --disable-pip-version-check -r "$ASC_DIR/requirements.txt"
+  fi
+}
+
+asc() {
+  ( cd "$ASC_DIR" && exec "$VENV/bin/python" main.py "$@" )
+}
+
+asc_help() {
+  ensure_python
+  ( cd "$ASC_DIR" && exec "$PY311" main.py "$@" )
+}
+
+resolve_apk() {
+  local IN="$1"
+  if [ -f "$IN" ]; then
+    abs_path "$IN"
+    return
+  fi
+  mkdir -p "$CACHE_DIR"
+  bs_connect
+  local P
+  P="$(bsadb shell "pm path $IN" 2>/dev/null | sed 's/package://' | tr -d '\r' | head -1)"
+  [ -n "$P" ] || { echo "not a file and not an installed package: $IN" >&2; exit 1; }
+  echo "[*] pulling $IN from device" >&2
+  bsadb pull "$P" "$CACHE_DIR/$IN.apk" >/dev/null
+  abs_path "$CACHE_DIR/$IN.apk"
+}
+
+CMD="${1:-}"
+[ -n "$CMD" ] || usage
+shift || true
+
+case "$CMD" in
+  -h|--help) usage ;;
+  getclass|findrefs|gui) ;;
+  *) usage ;;
+esac
+
+ensure_asc
+
+if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
+  if [ "$CMD" = "gui" ]; then
+    usage
+  fi
+  asc_help "$CMD" --help
+  exit $?
+fi
+
+[ $# -ge 1 ] || usage
+TARGET="$1"
+shift
+APK="$(resolve_apk "$TARGET")"
+
+ensure_venv
+
+# ASC argparse takes --debug/--threads (and getclass -o) on the parent
+# parser, before apk_path. Nested find_type subparsers reject those flags
+# if they appear after `string|type|method|field`. Hoist parent flags.
+HOIST=()
+REST=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --debug)
+      HOIST+=("$1"); shift ;;
+    --threads|--thread)
+      [ $# -ge 2 ] || { echo "flag $1 needs a value" >&2; exit 1; }
+      HOIST+=("$1" "$2"); shift 2 ;;
+    -o|--output)
+      [ $# -ge 2 ] || { echo "flag $1 needs a value" >&2; exit 1; }
+      # ASC runs with cwd=vendor/asc; make -o absolute so relative paths still land in the caller's dir.
+      OUT_ABS="$(abs_path "$2")"
+      if [ "$CMD" = "getclass" ]; then
+        HOIST+=("$1" "$OUT_ABS"); shift 2
+      else
+        REST+=("$1" "$OUT_ABS"); shift 2
+      fi
+      ;;
+    *)
+      REST+=("$1"); shift ;;
+  esac
+done
+
+case "$CMD" in
+  getclass)
+    [ ${#REST[@]} -ge 1 ] || { echo "usage: bs-decomp getclass <apk|pkg> <class>" >&2; exit 1; }
+    CLASS="${REST[0]}"
+    REST=("${REST[@]:1}")
+    asc getclass ${HOIST[@]+"${HOIST[@]}"} "$APK" "$CLASS" ${REST[@]+"${REST[@]}"}
+    ;;
+  findrefs)
+    [ ${#REST[@]} -ge 1 ] || { echo "usage: bs-decomp findrefs <apk|pkg> string|type|method|field ..." >&2; exit 1; }
+    asc findrefs ${HOIST[@]+"${HOIST[@]}"} "$APK" ${REST[@]+"${REST[@]}"}
+    ;;
+  gui)
+    asc "$APK" --gui ${HOIST[@]+"${HOIST[@]}"} ${REST[@]+"${REST[@]}"}
+    ;;
+esac

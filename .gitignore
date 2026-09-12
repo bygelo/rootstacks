@@ -12,6 +12,10 @@ assets/magisk.apk
 assets/apk/*.apk
 assets/modules/*.zip
 vendor/*/magisk.apk
+vendor/asc/.venv/
+
+# Host-side APK cache (bs-decomp package pulls)
+.cache/
 
 # BlueStacks proprietary boot image backup (generated locally by bs-root; never publish)
 initrd_hvf.img*
