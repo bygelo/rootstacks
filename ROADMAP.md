@@ -1,7 +1,7 @@
 # rootstacks ROADMAP — analysis/RE capabilities to add
 
 Base already working: native ARM64 Android 13, Magisk Delta/Kitsune 27001 root
-(persistent, ADB-granted), root frida-server 17.9.1, mitmproxy CA in system store,
+(persistent, ADB-granted), root frida-server 17.17.0, mitmproxy CA in system store,
 SELinux permissive. Everything below is additive. Ranked by value for this exact box.
 
 Platform truths that shape priorities:
@@ -28,7 +28,7 @@ Platform truths that shape priorities:
 - [x] **objection** 1.12.5 (`bs-objection <pkg>`) — SSL-unpin, root/emulator bypass, enum, dumps.
 - [x] **medusa** — vendored at `vendor/medusa` (run `python vendor/medusa/mango.py`).
 - [x] Static kit (brew, Apple-Silicon native): **jadx 1.5.6**, **apktool 3.0.3**, **apkeep 1.0.0**.
-      (Ghidra: `brew install --cask ghidra` when you need .so decompilation — large, install on demand.)
+      Ghidra is optional (this box: `brew install --cask ghidra` → `ghidraRun`/`analyzeHeadless`; not required on a fresh clone).
 - [x] SSL-pinning: akabe1 **multiple-unpinning.js** in `assets/frida/` (`bs-unpin <pkg>`);
       objection `android sslpinning disable` as the one-liner.
 
@@ -37,6 +37,11 @@ Platform truths that shape priorities:
       CA already trusted system-wide → most apps decrypt.
 - [x] **friTap** 2.3.0 (`fritap -m -k keys.log <pkg>`) — frida TLS keylogger; beats native+Flutter pinning.
 - [x] **PCAPdroid** installed on-device (on-device capture + decrypting proxy).
+- [x] **`bs-vpn`** — egress-IP control via an *upstream* proxy (not just Mac interception):
+      guest TCP `--iptables REDIRECT (owner !0)--> gost redir :12345 --SOCKS5--> floxy`.
+      Root-only gost binary (`gost_3.3.0_android_arm64`), so every app socket takes one path
+      while frida-server (uid 0) stays direct to the Mac. Verified 2026-09-07: guest exit IP =
+      floxy `84.75.151.11`, game TCP redirected live. `bs-vpn install|on|off|status|check`.
 - [ ] Fallback for apps that ignore the proxy: Magisk iptables REDIRECT 443→10.0.2.2 (transparent).
 
 ## Tier 3 — Zygisk stack (root/frida hiding + Xposed) — BlueStacks-specific care
@@ -56,7 +61,8 @@ Platform truths that shape priorities:
 - [x] **frida-dexdump** 2.0.1 installed (`frida-dexdump -U -p <pid>`) — rip decrypted DEX (packed apps).
 - [ ] **blutter** (+ **reFlutter**) — Flutter: recover Dart AOT symbols from libapp.so; heavy build,
       do on demand (`brew install` deps then build). → github.com/worawit/blutter
-- [ ] **r2frida** / **jnitrace** — live native memory + JNI/libc tracing (`pip install`/`npm` on demand).
+- [x] **jnitrace** — installed (`jnitrace`); live JNI/libc tracing.
+- [ ] **r2frida** — live native memory (`r2pm` / on demand).
 
 ## Tier 5 — emulator/root-detection bypass (when a target fights back)
 - [ ] objection/medusa runtime bypass first (patch Build.*, su/which probes) — no footprint.
@@ -65,12 +71,12 @@ Platform truths that shape priorities:
       artifacts + frida presence that still leak.
 
 ## Tier 6 — toolkit polish (rootstacks itself)
-- [x] `bs-proxy on|transparent`, `bs-objection`, `bs-unpin`, `bs-triage`, `bs-hide`, `bs-doctor`, `bs-frida sync`.
+- [x] `bs-proxy on|transparent`, `bs-vpn` (upstream/floxy egress), `bs-objection`, `bs-unpin`, `bs-triage`, `bs-hide`, `bs-doctor`, `bs-frida sync`.
 - [x] frida script library in `assets/frida/` (multiple-unpinning.js, il2cpp-bridge.js).
 - [x] `bs-snapshot` — compressed data.qcow2 baseline (`rooted-baseline`, 4.1G).
 - [x] Toolkit under git (`git log`); `.gitignore` excludes snapshots/large blobs.
 - [x] `docs/bluestacks-internals.md` (hcall/qvirt RE) + `docs/https-intercept-proof.md` (e2e evidence).
-- [ ] `bs-install`/`bs-pull` convenience helpers (minor).
+- [x] `bs-install` / `bs-pull` convenience helpers.
 
 ## Explicitly out of scope (won't work here)
 - Full Play Integrity DEVICE/STRONG (no keybox on a VM). Stock Zygisk / Zygisk Next (kernel-blocked).
@@ -81,8 +87,8 @@ Platform truths that shape priorities:
   bridge fully protocol-mapped (`ioctl(fd,OPCODE,&payload)` over a world-writable char dev;
   mmap+IRQ hot path; 74 hcalls). Live tracer `bs-hcall-trace`. Finding: **guest self-root via
   hcall is NOT reachable** (rooting hcalls are host-gated notifications) → initrd patch stays
-  the root method. Doc: `docs/bluestacks-internals.md`. Open thread: decompile
-  `hcallCommonCommand`'s opcode table (static, high effort).
+  the root method. Doc: `docs/bluestacks-internals.md`. Opcode table dumped (173)
+  in `docs/hcall-opcodes.tsv`; residual is `hcallCommonCommand`'s generic passthrough body.
 - [x] **Publishable polish** — `CREDITS.md` (attribution), scoped `LICENSE` (MIT for original
   work; vendored copyleft preserved), README repositioned as the definitive Air stack.
 - [ ] Before public push: confirm each vendored license; swap large binary assets for a download script.

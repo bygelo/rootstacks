@@ -1,6 +1,6 @@
 #!/bin/bash
 # Push (if needed) and run frida-server as root on BlueStacks Air.
-# Usage: bs-frida [up|down|status] [--server /path/to/frida-server-arm64]
+# Usage: bs-frida [up|down|status|sync] [--server /path/to/frida-server-arm64]
 set -euo pipefail
 . "$(dirname "$0")/bs-env.sh"
 
@@ -41,26 +41,44 @@ case "$CMD" in
     echo "[✓] synced: server=$CLIENT client=$CLIENT → $(frida-ps -H 127.0.0.1:27042 2>/dev/null | wc -l | tr -d ' ') procs visible"
     ;;
   up)
+    # A version mismatch between the on-device server and the Mac frida CLIENT is
+    # silent-but-fatal: the client attaches and scripts load, but Interceptor.attach
+    # no-ops (hooks report ✓ yet never fire). So pick a server that MATCHES the client.
+    # (frida-server-rootstacks shipped 16.5.9; a 17.x client needs a 17.x server —
+    # verified 2026-09-08.) Run `bs-frida sync` to fetch an exact match.
+    CLIENT="$(frida --version 2>/dev/null | tr -d '\r' || true)"
     if [ -n "$SERVER_LOCAL" ]; then
       bsadb push "$SERVER_LOCAL" "$REMOTE" >/dev/null
-    elif ! bsadb shell "ls $REMOTE" >/dev/null 2>&1; then
-      # fall back to any staged frida-server
-      EXIST=$(bsadb shell 'ls /data/local/tmp/frida-server-17.17 /data/local/tmp/frida-server-17 /data/local/tmp/frida-server 2>/dev/null | head -1' | tr -d '\r')
-      [ -n "$EXIST" ] || { echo "No frida-server found; pass --server <path to android-arm64 frida-server>" >&2; exit 1; }
-      bsadb shell "cp $EXIST $REMOTE"
+      RUN="$REMOTE"
+    else
+      RUN=""
+      # prefer an exact client-version match, then any staged server
+      for cand in "/data/local/tmp/frida-server-$CLIENT" "$REMOTE" /data/local/tmp/frida-server-17.17 /data/local/tmp/frida-server-17 /data/local/tmp/frida-server; do
+        bsadb shell "ls $cand" >/dev/null 2>&1 || continue
+        SV="$(bsadb shell "su -c '$cand --version' 2>/dev/null" | tr -d '\r' || true)"
+        if [ -n "$CLIENT" ] && [ "$SV" = "$CLIENT" ]; then RUN="$cand"; break; fi
+        [ -z "$RUN" ] && RUN="$cand"   # remember first existing as a fallback
+      done
+      [ -n "$RUN" ] || { echo "No frida-server found; run 'bs-frida sync' or pass --server <android-arm64 frida-server>" >&2; exit 1; }
+      SV="$(bsadb shell "su -c '$RUN --version' 2>/dev/null" | tr -d '\r' || true)"
+      if [ -n "$CLIENT" ] && [ "$SV" != "$CLIENT" ]; then
+        echo "WARNING: server $RUN is $SV but frida client is $CLIENT — hooks will silently no-op." >&2
+        echo "         run 'bs-frida sync' to fetch a matching server." >&2
+      fi
     fi
-    bsadb shell "su -c 'chmod 755 $REMOTE; killall -q frida-server-rootstacks 2>/dev/null; nohup $REMOTE >/dev/null 2>&1 &'"
+    BN="$(basename "$RUN")"
+    bsadb shell "su -c 'chmod 755 $RUN; killall -q $BN frida-server-rootstacks 2>/dev/null; nohup $RUN >/dev/null 2>&1 &'"
     sleep 1
     bsadb forward tcp:27042 tcp:27042 >/dev/null 2>&1
-    echo "frida-server started as root: $(bsadb shell 'su -c "ps -A | grep frida-server-rootstacks"' | tr -d '\r')"
+    echo "frida-server started as root: $(bsadb shell "su -c 'ps -A | grep frida-server'" | tr -d '\r')"
     echo "connect from mac:  frida-ps -H 127.0.0.1:27042"
     ;;
   down)
-    bsadb shell "su -c 'killall -q frida-server-rootstacks 2>/dev/null'" || true
+    bsadb shell "su -c 'pkill -q -f frida-server 2>/dev/null; killall -q frida-server-rootstacks 2>/dev/null'" || true
     echo "frida-server stopped"
     ;;
   status)
     bsadb shell "ps -A 2>/dev/null | grep frida-server || echo 'not running'"
     ;;
-  *) echo "usage: bs-frida [up|down|status] [--server PATH]" >&2; exit 1 ;;
+  *) echo "usage: bs-frida [up|down|status|sync] [--server PATH]" >&2; exit 1 ;;
 esac

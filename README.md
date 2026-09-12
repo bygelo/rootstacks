@@ -51,6 +51,7 @@ Sideloading needs no root: `hd-adb -s 127.0.0.1:5555 install app.apk`.
 | `bs-status` | One-look state: arch, root, SELinux, frida, zygisk, modules, proxy, updates |
 | `bs-frida up \| sync` | Run frida-server as root; `sync` matches the on-device server to your frida client |
 | `bs-proxy on \| transparent` | Route guest traffic → Mac mitmproxy (`transparent` = iptables for proxy-ignoring apps) |
+| `bs-vpn install \| on \| off \| status \| check` | Guest TCP → gost redir → upstream SOCKS5 (floxy egress). Root-only; frida-server (uid 0) stays direct. |
 | `bs-mitm-cert [ca.pem]` | Trust a CA in the system store (bind-mount; `--module` = persist) |
 | `bs-objection <pkg>` | `objection explore` over the root frida server |
 | `bs-unpin <pkg>` | Spawn an app with SSL pinning bypassed (akabe1 script) |

@@ -1,0 +1,84 @@
+#!/bin/bash
+# Host-only tree/docs consistency check. No guest, no adb, no BlueStacks.
+# Drives the shipped helpers (bash -n + bs-vpn unknown-arg) and asserts docs match.
+set -euo pipefail
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+pass=0
+fail=0
+ok() { echo "  ✓ $1"; pass=$((pass + 1)); }
+no() { echo "  ✗ $1"; fail=$((fail + 1)); }
+
+echo "== rootstacks host check =="
+
+# (a) syntax of the two in-flight helpers
+if bash -n "$ROOT/bin/bs-vpn" && bash -n "$ROOT/bin/bs-frida"; then
+  ok "bash -n bs-vpn + bs-frida"
+else
+  no "bash -n bs-vpn + bs-frida"
+fi
+
+# (b) vpn unknown-arg: usage names the four subcommands, non-zero exit
+set +e
+usage_out="$("$ROOT/bin/bs-vpn" nope 2>&1)"
+usage_ec=$?
+set -e
+if [ "$usage_ec" -ne 0 ]; then
+  ok "bs-vpn unknown-arg exit $usage_ec"
+else
+  no "bs-vpn unknown-arg exited 0"
+fi
+for word in install on off status check; do
+  if echo "$usage_out" | grep -q "$word"; then
+    ok "bs-vpn usage names $word"
+  else
+    no "bs-vpn usage missing $word (got: $usage_out)"
+  fi
+done
+
+# (c) README lists the vpn helper
+if grep -q "bs-vpn" "$ROOT/README.md"; then
+  ok "README mentions bs-vpn"
+else
+  no "README missing bs-vpn"
+fi
+
+# (d) ROADMAP does not leave install/pull or jnitrace unchecked
+if grep -E '^[[:space:]]*- \[ \].*(bs-install|bs-pull)' "$ROOT/ROADMAP.md" >/dev/null; then
+  no "ROADMAP has unchecked bs-install/bs-pull"
+else
+  ok "no unchecked bs-install/bs-pull"
+fi
+if grep -E '^[[:space:]]*- \[ \].*jnitrace' "$ROOT/ROADMAP.md" >/dev/null; then
+  no "ROADMAP has unchecked jnitrace"
+else
+  ok "no unchecked jnitrace"
+fi
+
+# (e) frida-server version oracle
+if grep -q "17.17.0" "$ROOT/docs/https-intercept-proof.md" && grep -q "17.17.0" "$ROOT/ROADMAP.md"; then
+  ok "ROADMAP and https-intercept-proof agree on 17.17.0"
+else
+  no "ROADMAP / https-intercept-proof missing 17.17.0"
+fi
+if grep -q "17.9.1" "$ROOT/ROADMAP.md"; then
+  no "ROADMAP still says 17.9.1"
+else
+  ok "ROADMAP has no 17.9.1"
+fi
+
+# (f) internals no longer calls the dumped opcode table an open thread
+if grep -qi "open thread" "$ROOT/docs/bluestacks-internals.md"; then
+  no "internals still says open thread"
+else
+  ok "internals has no open-thread"
+fi
+
+# gitignore covers generated quark logs
+if grep -q '\*\.quark\.log' "$ROOT/.gitignore"; then
+  ok ".gitignore has *.quark.log"
+else
+  no ".gitignore missing *.quark.log"
+fi
+
+echo "== $pass passed, $fail failed =="
+[ "$fail" -eq 0 ]

@@ -1,0 +1,118 @@
+#!/bin/bash
+# Route the BlueStacks guest's TCP through floxy via an on-device gost redir.
+# PCAPdroid's SOCKS5 path only covers TCP and its VPN DNS breaks in this
+# BlueStacks build (every DNS stays Closed). With root we run gost directly:
+#   guest TCP --REDIRECT--> 127.0.0.1:12345 (gost, root) --SOCKS5--> floxy --> internet
+# Covers 80,443,17000-17099 and any other TCP the game opens; UDP DNS stays
+# direct (goes to 8.8.8.8) which is fine — game protocol is TCP-only.
+#
+# Binary: /data/local/tmp/gost (gost_3.3.0_android_arm64). No PCAPdroid needed.
+# Usage: bs-vpn on | off | status | check | install
+set -euo pipefail
+. "$(dirname "$0")/bs-env.sh"
+
+REMOTE=/data/local/tmp/gost
+LOCAL_TMP=/tmp/gost
+URL="https://github.com/go-gost/gost/releases/download/v3.3.0/gost_3.3.0_android_arm64.tar.gz"
+CHAIN="GST"
+PORT=12345
+
+gost_remote_running() { bsadb shell "su -c 'ps -A 2>/dev/null | grep -q \"[g]ost\"'" 2>/dev/null; }
+
+gost_start() {
+  local up="$1"
+  bsadb shell "su -c '
+    killall -q gost 2>/dev/null; sleep 1
+    [ -x $REMOTE ] || { echo \"ERROR: $REMOTE missing (bs-vpn install)\" >&2; exit 1; }
+    nohup $REMOTE -L redir://:$PORT -F \"socks5://$up\" >/data/local/tmp/gost.log 2>&1 &
+    echo \$!
+  '" 2>/dev/null | tr -d '\r'
+  sleep 2
+  gost_remote_running || { echo "ERROR: gost failed to start (cat /data/local/tmp/gost.log)" >&2; bsadb shell "su -c 'cat /data/local/tmp/gost.log 2>/dev/null | tail -n 20'" 2>/dev/null | tr -d '\r'; exit 1; }
+  echo "[✓] gost listening redir :$PORT → socks5://…"
+}
+
+gost_stop() {
+  bsadb shell "su -c 'killall -q gost 2>/dev/null; echo stopped'" 2>/dev/null | tr -d '\r' || true
+}
+
+iptables_on() {
+  local host="${1%%:*}"
+  bsadb shell "su -c '
+    iptables -t nat -F $CHAIN 2>/dev/null; iptables -t nat -X $CHAIN 2>/dev/null
+    iptables -t nat -N $CHAIN
+    iptables -t nat -A $CHAIN -d 127.0.0.0/8 -j RETURN
+    iptables -t nat -A $CHAIN -d 10.0.0.0/8 -j RETURN
+    iptables -t nat -A $CHAIN -d '"$host"' -j RETURN
+    iptables -t nat -A $CHAIN -p tcp -j REDIRECT --to-ports '"$PORT"'
+    iptables -t nat -C OUTPUT -p tcp -m owner ! --uid-owner 0 -j $CHAIN 2>/dev/null || iptables -t nat -A OUTPUT -p tcp -m owner ! --uid-owner 0 -j $CHAIN
+    iptables -t nat -L $CHAIN -n -v
+  '" 2>/dev/null | tr -d '\r'
+  echo "[✓] iptables $CHAIN → redir :$PORT (owner !0, skip localhost/10/ + $host)"
+}
+
+iptables_off() {
+  bsadb shell "su -c '
+    iptables -t nat -D OUTPUT -p tcp -m owner ! --uid-owner 0 -j '"$CHAIN"' 2>/dev/null || true
+    iptables -t nat -F '"$CHAIN"' 2>/dev/null || true
+    iptables -t nat -X '"$CHAIN"' 2>/dev/null || true
+    echo cleared
+  '" 2>/dev/null | tr -d '\r' || true
+}
+
+guest_ip() { bsadb shell "wget -qO- --timeout=10 ifconfig.me/ip 2>/dev/null" 2>/dev/null | tr -d '\r'; }
+
+case "${1:-status}" in
+  install)
+    if [ -f "$LOCAL_TMP/gost" ]; then
+      echo "local /tmp/gost present, pushing..."
+      bsadb push "$LOCAL_TMP/gost" "$REMOTE" >/dev/null 2>&1
+      bsadb shell "su -c 'chmod 755 $REMOTE'" 2>/dev/null | tr -d '\r'
+      echo "[✓] pushed $REMOTE"
+    elif bsadb shell "ls $REMOTE" >/dev/null 2>&1; then
+      echo "[✓] $REMOTE already on device"
+    else
+      echo "Fetching gost android-arm64 from $URL ..."
+      mkdir -p /tmp
+      curl -fsSL "$URL" -o /tmp/gost.tgz && tar -xzf /tmp/gost.tgz -C /tmp && mv /tmp/gost "$LOCAL_TMP/gost" 2>/dev/null || mv /tmp/gost /tmp/gost.bin 2>/dev/null || true
+      [ -f "$LOCAL_TMP/gost" ] || [ -f /tmp/gost ] || { echo "ERROR: fetch failed" >&2; exit 1; }
+      [ -f "$LOCAL_TMP/gost" ] || mv /tmp/gost "$LOCAL_TMP/gost"
+      bsadb push "$LOCAL_TMP/gost" "$REMOTE" >/dev/null 2>&1
+      bsadb shell "su -c 'chmod 755 $REMOTE'" 2>/dev/null | tr -d '\r'
+      echo "[✓] installed $REMOTE"
+    fi
+    ;;
+  on)
+    bs_connect
+    bs_has_root || { echo "ERROR: no root" >&2; exit 1; }
+    # upstream from blead/.env unless passed explicitly as $2
+    UPSTREAM="${2:-}"
+    if [ -z "$UPSTREAM" ]; then
+      BLEAD="${BLEAD_ENV:-$HOME/Code/blead/.env}"
+      # shellcheck disable=SC1090
+      [ -f "$BLEAD" ] && set -a && . "$BLEAD" && set +a
+      : "${PROXY_HOST:?PROXY_HOST not set (pass upstream as arg or set blead/.env)}"
+      UPSTREAM="$PROXY_USERNAME:$PROXY_PASSWORD@$PROXY_HOST:$PROXY_PORT"
+    fi
+    gost_start "$UPSTREAM"
+    iptables_on "$UPSTREAM"
+    echo "[*] guest exit IP: $(guest_ip) (expect floxy IP)"
+    ;;
+  off)
+    bs_connect || true
+    iptables_off 2>/dev/null || true
+    gost_stop 2>/dev/null || true
+    echo "[✓] vpn off"
+    ;;
+  status)
+    bs_connect || true
+    if gost_remote_running; then echo "gost: running"; else echo "gost: NOT running"; fi
+    echo "iptables $CHAIN:"; bsadb shell "su -c 'iptables -t nat -L $CHAIN -n -v 2>/dev/null || echo \"(none)\"'" 2>/dev/null | tr -d '\r'
+    echo "guest exit IP: $(guest_ip)"
+    ;;
+  check)
+    bs_connect
+    echo "guest exit IP: $(guest_ip)"
+    ;;
+  *) echo "usage: bs-vpn install | on [user:pass@host:port] | off | status | check" >&2; exit 1 ;;
+esac

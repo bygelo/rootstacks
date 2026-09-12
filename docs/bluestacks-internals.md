@@ -121,5 +121,6 @@ rizin -A /Applications/BlueStacks.app/Contents/Frameworks/libqvirt.dylib   # aaa
 nm -gU  /Applications/BlueStacks.app/Contents/Frameworks/libqvirt.dylib | grep -i hcall
 # guest side: pull bstpgaipc.ko from the initrd, analyze its ioctl/char-dev interface
 ```
-Status: mapped the interface + transport; deep decompilation of `hcallCommonCommand` is the
-open thread (Tier deferred — high effort, no product surface yet).
+Status: opcode table dumped (`docs/hcall-opcodes.tsv`, 173 entries). Residual RE is
+`hcallCommonCommand`'s generic `(subcmd, in_buf, out_buf)` passthrough body — not a
+second root path.

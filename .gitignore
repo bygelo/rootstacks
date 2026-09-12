@@ -1,4 +1,5 @@
 # Large / machine-specific artifacts — do not commit
+*.quark.log
 snapshots/
 *.qcow2
 *.qcow2.z
