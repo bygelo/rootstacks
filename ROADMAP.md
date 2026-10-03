@@ -81,6 +81,24 @@ Platform truths that shape priorities:
 - [x] `docs/bluestacks-internals.md` (hcall/qvirt RE) + `docs/https-intercept-proof.md` (e2e evidence).
 - [x] `bs-install` / `bs-pull` convenience helpers.
 
+## Tier 7 — multi-agent native decompilation (the MW2 methodology)
+Ported from Maurice Heumann's Modern Warfare 2 decompile (≈99%, solo, up to 17 concurrent
+agents): **worker agents decompile one function at a time, an overseer gates every commit,
+Ghidra plugs in via MCP.** rootstacks already has the orchestration (house `/fanout` + `/gate`
++ `/converge`); these add the native-RE substrate ASC/`bs-decomp` lack (dex only).
+- [x] **`bs-ghidra`** — headless Ghidra over BlueStacks' own Mach-O/dylibs. `analyze` (import+auto),
+      `manifest` (the TODO work queue, biggest-first), `next`, `decompile <fn>` (one function = one
+      worker's unit), `list`. Java postScripts (`assets/ghidra/*.java`; Ghidra 12 dropped Jython).
+      Project under `re-projects/` (gitignored; Ghidra forbids `.`-prefixed path elements). Target is
+      the user's local install — nothing proprietary is vendored. Verified e2e on `qemu-img` (7415 fns).
+- [x] **`bs-ghidra mcp`** — Ghidra MCP bridge (LaurieWired/GhidraMCP) → `.mcp.json` `ghidra` server so
+      agents read decompiled C, rename, retype, comment, walk xrefs live. Endpoint pinned to :8192
+      (not :8080 — mitmproxy). `--fetch` vendors the bridge + venv.
+- [x] **`docs/decomp-swarm.md`** — the worker/overseer playbook mapping the MW2 roles onto the house
+      skills, with an evidence-backed acceptance gate (no name lands without xref/string/caller proof).
+- [ ] **First swarm target:** `hcallCommonCommand`'s generic passthrough body (the one function the
+      manual hcall pass left) → then fan out `libqvirt.dylib`'s FUN_* queue.
+
 ## Explicitly out of scope (won't work here)
 - Full Play Integrity DEVICE/STRONG (no keybox on a VM). Stock Zygisk / Zygisk Next (kernel-blocked).
   x86-only tooling (we're native ARM64). WireGuard transparent routing (10.0.2.2 already reaches host).

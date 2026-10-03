@@ -19,3 +19,7 @@ vendor/asc/.venv/
 
 # BlueStacks proprietary boot image backup (generated locally by bs-root; never publish)
 initrd_hvf.img*
+
+# Ghidra headless projects (bs-ghidra) — machine-local, proprietary target
+re-projects/
+.mcp.json

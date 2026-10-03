@@ -1,0 +1,85 @@
+#!/bin/bash
+# Set up the Ghidra MCP bridge (LaurieWired/GhidraMCP) so an agent swarm drives
+# Ghidra LIVE — read decompiled C, rename functions/vars, set types, leave
+# comments, follow xrefs — the enabler the MW2 decompile pipeline was built on.
+#
+# Two halves:
+#   1. a Ghidra PLUGIN that serves an HTTP API from inside a running Ghidra GUI
+#   2. bridge_mcp_ghidra.py, the MCP server that proxies that API over stdio
+#
+# We pin the plugin's HTTP port to 8192 (NOT 8080 — that's rootstacks mitmproxy).
+#
+# Usage:
+#   bs-ghidra-mcp            # write .mcp.json + print the 3 install steps
+#   bs-ghidra-mcp --fetch    # also clone GhidraMCP into vendor/ and build the bridge venv
+set -euo pipefail
+. "$(dirname "$0")/bs-env.sh"
+
+GMCP_DIR="$REPO_DIR/vendor/ghidra-mcp"
+GHIDRA_HTTP_PORT="${GHIDRA_HTTP_PORT:-8192}"
+BRIDGE="$GMCP_DIR/bridge_mcp_ghidra.py"
+VENV="$GMCP_DIR/.venv"
+PY="$VENV/bin/python"
+
+write_mcp_json() {
+  local f="$REPO_DIR/.mcp.json"
+  local py_cmd bridge_path
+  if [ -x "$PY" ]; then py_cmd="$PY"; else py_cmd="python3"; fi
+  bridge_path="$BRIDGE"
+  cat > "$f" <<JSON
+{
+  "mcpServers": {
+    "ghidra": {
+      "command": "$py_cmd",
+      "args": [
+        "$bridge_path",
+        "--transport", "stdio",
+        "--ghidra-server", "http://127.0.0.1:$GHIDRA_HTTP_PORT/"
+      ]
+    }
+  }
+}
+JSON
+  echo "[bs-ghidra-mcp] wrote $f (ghidra endpoint :$GHIDRA_HTTP_PORT, stdio bridge)"
+}
+
+fetch() {
+  mkdir -p "$REPO_DIR/vendor"
+  if [ ! -d "$GMCP_DIR/.git" ]; then
+    echo "[bs-ghidra-mcp] cloning GhidraMCP -> $GMCP_DIR"
+    git clone --depth 1 https://github.com/LaurieWired/GhidraMCP "$GMCP_DIR"
+  else
+    echo "[bs-ghidra-mcp] GhidraMCP already vendored"
+  fi
+  if [ ! -x "$PY" ]; then
+    echo "[bs-ghidra-mcp] building bridge venv"
+    python3 -m venv "$VENV"
+    "$VENV/bin/pip" install -q --disable-pip-version-check mcp requests || \
+      "$VENV/bin/pip" install -q --disable-pip-version-check -r "$GMCP_DIR/requirements.txt" 2>/dev/null || true
+  fi
+}
+
+[ "${1:-}" = "--fetch" ] && fetch
+
+write_mcp_json
+
+cat <<EOF
+
+Ghidra MCP — install steps (one-time):
+
+  1. Plugin: copy the built extension zip from $GMCP_DIR into Ghidra via
+     File ▸ Install Extensions ▸ (+), restart Ghidra, then enable the
+     GhidraMCP plugin (File ▸ Configure ▸ Miscellaneous). In its tool options
+     set the server port to $GHIDRA_HTTP_PORT (NOT 8080 — mitmproxy owns that).
+       (no built zip? run: bs-ghidra-mcp --fetch, then build it per that repo's README)
+
+  2. Open a target in Ghidra GUI over the SAME shared project bs-ghidra uses:
+       ghidraRun   # then open project $REPO_DIR/re-projects/rootstacks
+     and load libqvirt.dylib (or MacOS/BlueStacks). The plugin serves on :$GHIDRA_HTTP_PORT.
+
+  3. .mcp.json now defines the "ghidra" MCP server (stdio). Restart Claude Code
+     in $REPO_DIR; the agent can now read decompiled C, rename, retype, comment,
+     and walk xrefs live. Headless batch work still goes through bs-ghidra.
+
+Swarm playbook (worker agents + overseer): docs/decomp-swarm.md
+EOF

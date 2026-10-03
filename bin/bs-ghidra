@@ -1,0 +1,140 @@
+#!/bin/bash
+# Native-binary RE harness for rootstacks — headless Ghidra over BlueStacks'
+# own Mach-O/dylibs (libqvirt = customized QEMU/HVF; MacOS/BlueStacks = hcall
+# dispatch). ASC/bs-decomp cover Dalvik/dex; this is the native .so/Mach-O path.
+#
+# It produces the decompile WORK QUEUE the agent swarm consumes — one function
+# per worker, overseer gates the commit (see docs/decomp-swarm.md). Modelled on
+# the MW2 decompile pipeline: worker agents + overseer + Ghidra-over-MCP.
+#
+# Usage:
+#   bs-ghidra analyze   [binary]          # import + auto-analyze into the shared project
+#   bs-ghidra manifest  [binary]          # export the TODO work queue -> .cache/ghidra/<bin>.manifest.tsv
+#   bs-ghidra decompile [binary] <fn>     # emit C for ONE function (0xADDR or name) — a worker's unit
+#   bs-ghidra next      [binary] [N]      # print the top N todo functions (default 10)
+#   bs-ghidra mcp                         # set up the Ghidra MCP bridge so agents drive Ghidra live
+#   bs-ghidra list                        # list the native RE targets in the BlueStacks bundle
+#
+# Env: GHIDRA_INSTALL_DIR (auto-resolved), BS_APP, GHIDRA_PROJECT (default .cache/ghidra).
+set -euo pipefail
+. "$(dirname "$0")/bs-env.sh"
+
+FW="$BS_APP/Contents/Frameworks"
+DEFAULT_BIN="${BS_RE_TARGET:-$FW/libqvirt.dylib}"
+# Ghidra forbids a '.'-prefixed element anywhere in the project path, so this
+# cannot live under .cache/ — it gets its own dot-free, gitignored dir.
+PROJECT_DIR="${GHIDRA_PROJECT:-$REPO_DIR/re-projects}"
+PROJECT_NAME="rootstacks"
+SCRIPTS="$REPO_DIR/assets/ghidra"
+
+usage() { sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-1}"; }
+
+resolve_ghidra() {
+  if [ -z "${GHIDRA_INSTALL_DIR:-}" ]; then
+    local ah
+    ah="$(command -v analyzeHeadless 2>/dev/null || true)"
+    [ -n "$ah" ] && ah="$(readlink "$ah" 2>/dev/null || echo "$ah")"
+    if [ -n "$ah" ]; then
+      GHIDRA_INSTALL_DIR="$(cd "$(dirname "$ah")/.." && pwd)"
+    fi
+  fi
+  HEADLESS="${GHIDRA_INSTALL_DIR:+$GHIDRA_INSTALL_DIR/support/analyzeHeadless}"
+  [ -n "${HEADLESS:-}" ] && [ -x "$HEADLESS" ] || HEADLESS="$(command -v analyzeHeadless 2>/dev/null || true)"
+  [ -n "$HEADLESS" ] && [ -x "$HEADLESS" ] || { echo "analyzeHeadless not found; brew install --cask ghidra, or set GHIDRA_INSTALL_DIR" >&2; exit 1; }
+}
+
+# ghidra project import name for a path (basename, no dots -> stable program name)
+prog_name() { printf '%s' "$(basename "$1")" | tr -c 'A-Za-z0-9_.-' '_'; }
+
+resolve_bin() {
+  local b="${1:-$DEFAULT_BIN}"
+  if [ ! -f "$b" ]; then
+    # allow a bare name resolved against the Frameworks dir or MacOS dir
+    if [ -f "$FW/$b" ]; then b="$FW/$b"
+    elif [ -f "$BS_APP/Contents/MacOS/$b" ]; then b="$BS_APP/Contents/MacOS/$b"
+    else echo "binary not found: $b" >&2; exit 1; fi
+  fi
+  printf '%s\n' "$b"
+}
+
+# Has this program already been imported? Ghidra stores programs in an opaque
+# idata DB, so we keep our own dot-free marker registry instead of probing it.
+MARKER_DIR="$PROJECT_DIR/imported"
+is_imported() { [ -f "$MARKER_DIR/$1" ]; }
+mark_imported() { mkdir -p "$MARKER_DIR"; : > "$MARKER_DIR/$1"; }
+
+do_analyze() {
+  local bin pn
+  bin="$(resolve_bin "${1:-}")"; pn="$(prog_name "$bin")"
+  mkdir -p "$PROJECT_DIR"
+  resolve_ghidra
+  if is_imported "$pn"; then
+    echo "[bs-ghidra] $pn already imported (use a fresh GHIDRA_PROJECT to re-import)"; return 0
+  fi
+  echo "[bs-ghidra] importing + analyzing $bin (this takes a while for libqvirt)..."
+  "$HEADLESS" "$PROJECT_DIR" "$PROJECT_NAME" \
+    -import "$bin" -overwrite \
+    -scriptPath "$SCRIPTS" \
+    >&2
+  mark_imported "$pn"
+  echo "[bs-ghidra] analyzed: $pn"
+}
+
+with_program() {  # run a postScript against an already-imported program
+  local bin pn; bin="$(resolve_bin "${1:-}")"; pn="$(prog_name "$bin")"; shift || true
+  resolve_ghidra
+  is_imported "$pn" || { echo "[bs-ghidra] $pn not imported yet — run: bs-ghidra analyze $(basename "$bin")" >&2; exit 1; }
+  "$HEADLESS" "$PROJECT_DIR" "$PROJECT_NAME" \
+    -process "$pn" -noanalysis \
+    -scriptPath "$SCRIPTS" "$@"
+}
+
+CMD="${1:-}"; [ -n "$CMD" ] || usage
+shift || true
+
+case "$CMD" in
+  -h|--help) usage 0 ;;
+
+  list)
+    echo "Native RE targets in $BS_APP:"
+    for f in "$FW/libqvirt.dylib" "$BS_APP/Contents/MacOS/BlueStacks" \
+             "$FW/libOpenglRender.dylib" "$FW/lib64/vulkan/libMoltenVK.dylib"; do
+      [ -f "$f" ] && printf '  %10s  %s\n' "$(stat -f %z "$f")" "${f#$BS_APP/Contents/}"
+    done
+    echo "default target: ${DEFAULT_BIN#$BS_APP/Contents/}  (override with BS_RE_TARGET)"
+    ;;
+
+  analyze) do_analyze "${1:-}" ;;
+
+  manifest)
+    bin="$(resolve_bin "${1:-}")"; pn="$(prog_name "$bin")"
+    out="$PROJECT_DIR/$pn.manifest.tsv"
+    with_program "$(basename "$bin")" -postScript ExportManifest.java "$out" >&2
+    echo "$out"
+    ;;
+
+  next)
+    # next [binary] [N] — a bare number means "N, default binary"
+    if [ $# -eq 1 ] && printf '%s' "${1:-}" | grep -qE '^[0-9]+$'; then
+      set -- "" "$1"
+    fi
+    bin="$(resolve_bin "${1:-}")"; pn="$(prog_name "$bin")"
+    n="${2:-10}"; mf="$PROJECT_DIR/$pn.manifest.tsv"
+    [ -f "$mf" ] || { echo "no manifest yet — run: bs-ghidra manifest $(basename "$bin")" >&2; exit 1; }
+    awk -F'\t' 'NR==1 || $1=="todo"' "$mf" | head -n "$((n+1))"
+    ;;
+
+  decompile)
+    # decompile [binary] <fn> — one arg means "<fn>, default binary"
+    if [ $# -eq 1 ]; then set -- "" "$1"; fi
+    bin="$(resolve_bin "${1:-}")"
+    fn="${2:-}"; [ -n "$fn" ] || { echo "need a function (0xADDR or name)" >&2; exit 1; }
+    tmp="$(mktemp "${TMPDIR:-/tmp}/bs-ghidra.XXXXXX.c")"
+    with_program "$(basename "$bin")" -postScript DecompileOne.java "$fn" "$tmp" >&2
+    cat "$tmp"; rm -f "$tmp"
+    ;;
+
+  mcp) exec "$REPO_DIR/bin/bs-ghidra-mcp" "$@" ;;
+
+  *) usage ;;
+esac

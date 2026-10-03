@@ -59,6 +59,8 @@ Sideloading needs no root: `hd-adb -s 127.0.0.1:5555 install app.apk`.
 | `bs-hide <pkg>` | Magisk denylist enforce + open LSPosed manager |
 | `bs-triage <pkg\|apk>` | Static triage: apkleaks + jadx + apktool manifest + quark |
 | `bs-decomp getclass \| findrefs \| gui` | On-demand class decompile + xref via vendored ASC (Python 3.11). `<apk\|pkg>` then class/query. |
+| `bs-ghidra analyze \| manifest \| next \| decompile \| list` | Native-binary RE (headless Ghidra over `libqvirt`/`MacOS/BlueStacks`). Builds the per-function decompile work queue the agent swarm consumes. |
+| `bs-ghidra mcp [--fetch]` | Wire up the Ghidra MCP bridge (`.mcp.json`) so agents drive Ghidra live. Playbook: [`docs/decomp-swarm.md`](docs/decomp-swarm.md). |
 | `bs-install <apk>` / `bs-pull <pkg>` | Sideload / pull an APK |
 | `bs-snapshot save \| restore` | Snapshot/restore the data disk (compressed) |
 | `bs-hcall-trace [proc]` | Live-trace the guest↔host hcall channel (read-only RE) |
